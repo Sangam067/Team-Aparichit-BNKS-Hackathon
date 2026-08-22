@@ -12,7 +12,7 @@
   --border: rgba(255, 255, 255, 0.14);
 
   --surface: rgba(255, 255, 255, 0.06);
-  --surface-hover: rgba(255, 255, 255, 0.10);
+  --surface-hover: rgba(255, 255, 255, 0.1);
   --surface-elevated: rgba(255, 255, 255, 0.08);
   --surface-glass: rgba(31, 76, 54, 0.28);
 
@@ -51,7 +51,11 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family:
+    var(--font-geist-sans),
+    system-ui,
+    -apple-system,
+    sans-serif;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -950,6 +954,77 @@ summary:focus-visible {
 }
 
 /* Study Pack Sections */
+.study-rich-text {
+  color: inherit;
+  line-height: 1.7;
+}
+.study-rich-text > :first-child {
+  margin-top: 0;
+}
+.study-rich-text > :last-child {
+  margin-bottom: 0;
+}
+.study-rich-text p,
+.study-rich-text ul,
+.study-rich-text ol {
+  margin: 0 0 12px;
+}
+.study-rich-text ul,
+.study-rich-text ol {
+  padding-left: 22px;
+}
+.study-rich-text li + li {
+  margin-top: 6px;
+}
+.study-rich-text .katex-display {
+  overflow-x: auto;
+  padding: 6px 0;
+}
+.study-rich-text-inline {
+  display: inline;
+}
+.study-rich-text-inline p {
+  display: inline;
+}
+.ss-tab-content .study-rich-text {
+  display: block;
+}
+.ss-tab-content .study-rich-text-inline {
+  display: inline;
+}
+.ss-overview {
+  margin: 0;
+}
+.ss-example-row .study-rich-text,
+.ss-resource .study-rich-text,
+.ss-concept-body,
+.ss-formula-meaning {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.ss-example-row .study-rich-text p,
+.ss-resource .study-rich-text p,
+.ss-concept-body p,
+.ss-formula-meaning p {
+  margin: 0;
+}
+.ss-keypoints li .study-rich-text,
+.ss-formula-vars li .study-rich-text {
+  display: inline;
+}
+.ss-keypoints li .study-rich-text p,
+.ss-formula-vars li .study-rich-text p {
+  display: inline;
+}
+.ss-formula-expr {
+  display: block;
+  overflow-x: auto;
+  white-space: normal;
+}
+.ss-formula-expr p {
+  margin: 0;
+}
 .study-pack {
   display: grid;
   gap: 28px;
@@ -1785,7 +1860,8 @@ summary:focus-visible {
   }
 }
 @keyframes boss-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
   }
   50% {
@@ -1793,7 +1869,8 @@ summary:focus-visible {
   }
 }
 @keyframes hp-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -1801,9 +1878,16 @@ summary:focus-visible {
   }
 }
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-6px); }
-  75% { transform: translateX(6px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
 }
 .shake {
   animation: shake 0.4s ease;
@@ -2060,7 +2144,9 @@ summary:focus-visible {
   background: rgba(31, 76, 54, 0.35);
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-xl);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    inset 0 1px rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(14px);
   margin-bottom: 40px;
   display: flex;
@@ -2129,7 +2215,9 @@ summary:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(237, 226, 205, 0.15);
+  box-shadow:
+    0 0 20px rgba(0, 0, 0, 0.5),
+    inset 0 0 12px rgba(237, 226, 205, 0.15);
   transition: all 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
   outline: none;
   position: relative;
@@ -2158,7 +2246,9 @@ summary:focus-visible {
 .roadmap-circle-node.active {
   background: linear-gradient(135deg, #1f4c36, #0d281a);
   border-color: var(--accent);
-  box-shadow: 0 0 28px rgba(237, 226, 205, 0.4), 0 0 0 4px rgba(237, 226, 205, 0.2);
+  box-shadow:
+    0 0 28px rgba(237, 226, 205, 0.4),
+    0 0 0 4px rgba(237, 226, 205, 0.2);
   animation: node-active-pulse 2.2s infinite ease-in-out;
 }
 
@@ -2171,13 +2261,18 @@ summary:focus-visible {
 }
 
 @keyframes node-active-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
-    box-shadow: 0 0 24px rgba(237, 226, 205, 0.3), 0 0 0 4px rgba(237, 226, 205, 0.15);
+    box-shadow:
+      0 0 24px rgba(237, 226, 205, 0.3),
+      0 0 0 4px rgba(237, 226, 205, 0.15);
   }
   50% {
     transform: scale(1.08);
-    box-shadow: 0 0 36px rgba(237, 226, 205, 0.55), 0 0 0 8px rgba(237, 226, 205, 0.25);
+    box-shadow:
+      0 0 36px rgba(237, 226, 205, 0.55),
+      0 0 0 8px rgba(237, 226, 205, 0.25);
   }
 }
 
@@ -2208,12 +2303,16 @@ summary:focus-visible {
   background: rgba(13, 22, 16, 0.95);
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 1px rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.6),
+    inset 0 1px rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(20px);
   z-index: 50;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 180ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2379,3 +2478,75 @@ summary:focus-visible {
   background: var(--error-bg);
 }
 
+/* Study session uses a calm reading surface instead of the arena palette. */
+.duo-modal-content {
+  --accent: #9a642f;
+  --accent-hover: #7f4f24;
+  --accent-soft: rgba(154, 100, 47, 0.1);
+  --accent-border: rgba(119, 79, 38, 0.32);
+  --border: rgba(54, 55, 49, 0.14);
+  --surface: #fffdf8;
+  --surface-hover: #f0ede5;
+  --surface-elevated: #ffffff;
+  --text-primary: #24251f;
+  --text-secondary: #5f625d;
+  --text-muted: #7c7d75;
+  --success: #4c7652;
+  --success-bg: rgba(76, 118, 82, 0.1);
+  --shadow-card: 0 8px 24px rgba(54, 45, 32, 0.08);
+  --shadow-elevated: 0 18px 48px rgba(35, 31, 24, 0.16);
+  background: #f4f0e8;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+.duo-modal-overlay {
+  background: rgba(29, 30, 28, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.duo-modal-content .study-section {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+.duo-modal-content .study-concept,
+.duo-modal-content .study-example,
+.duo-modal-content .study-formula {
+  background: #faf8f2;
+  border-color: var(--border);
+}
+
+.duo-modal-content .study-concept {
+  border-left-color: var(--accent);
+}
+
+.duo-modal-content .study-formula-expression {
+  background: #ebe5d9;
+  border-color: rgba(119, 79, 38, 0.2);
+  color: #70451f;
+}
+
+.duo-modal-content .study-key-points li,
+.duo-modal-content .study-resource {
+  background: var(--surface-hover);
+}
+
+.duo-modal-content .battle-cta {
+  background: #ebe5d9;
+  border-color: var(--accent-border);
+}
+
+.duo-modal-content .duo-modal-close {
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .duo-modal-content {
+    padding: 28px 18px;
+    border-radius: var(--radius-lg);
+  }
+}

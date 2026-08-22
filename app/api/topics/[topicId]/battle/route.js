@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import ai from "@/lib/gemini";
+import { generateWithFallback, cleanAndParseJSON } from "@/lib/gemini";
 import db from "@/lib/db.js";
 
 export async function POST(request, { params }) {
@@ -59,6 +59,8 @@ export async function POST(request, { params }) {
           created_at
         FROM battles
         WHERE topic_id = ?
+        ORDER BY id DESC
+        LIMIT 1
       `)
       .get(id);
 
@@ -177,9 +179,7 @@ Return exactly:
 correctAnswer is the zero-based index of the correct option.
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-
+    const response = await generateWithFallback({
       contents: [
         {
           role: "user",
@@ -190,7 +190,6 @@ correctAnswer is the zero-based index of the correct option.
           ],
         },
       ],
-
       config: {
         responseMimeType: "application/json",
       },
@@ -204,108 +203,84 @@ correctAnswer is the zero-based index of the correct option.
     // 3. Parse Gemini JSON
     // -----------------------------
 
-     let generatedBattle;
+    let generatedBattle;
 
     try {
-      generatedBattle = JSON.parse(response.text);
+      generatedBattle = cleanAndParseJSON(response.text);
     } catch (error) {
-      console.error("Invalid Gemini JSON:");
+      console.error("Invalid Gemini JSON:", error.message);
       console.error(response.text);
 
       return NextResponse.json(
         {
           error: "Gemini returned invalid JSON.",
+          details: error.message,
           raw: response.text,
         },
         { status: 502 }
       );
     }
-
     // -----------------------------
-    // 4. Validate questions
+    // 4. Normalize and validate questions
     // -----------------------------
 
-    if (
-       !generatedBattle ||
-      !Array.isArray(generatedBattle.questions) ||
-      generatedBattle.questions.length !== 10
-    ) {
+    const rawQuestions = Array.isArray(generatedBattle?.questions)
+      ? generatedBattle.questions
+      : Array.isArray(generatedBattle)
+      ? generatedBattle
+      : [];
+
+    if (rawQuestions.length === 0) {
       return NextResponse.json(
         {
-          error: "Gemini did not return exactly 10 questions.",
+          error: "Gemini did not return any questions.",
         },
         { status: 502 }
       );
     }
 
-    for (let i = 0; i < generatedBattle.questions.length; i++) {
-      const question = generatedBattle.questions[i];
+    const normalizedQuestions = [];
 
-      if (
-         !question ||
-        !question.question ||
-        !Array.isArray(question.options) ||
-        question.options.length !== 4 ||
-        typeof question.correctAnswer !== "number" ||
-        !question.explanation ||
-        !question.concept ||
-        !question.difficulty
-      ) {
-        return NextResponse.json(
-          {
-            error: `Invalid question structure at question ${
-              i + 1
-            }.`,
-          },
-          { status: 502 }
-        );
+    for (let i = 0; i < rawQuestions.length && normalizedQuestions.length < 10; i++) {
+      const q = rawQuestions[i];
+      if (!q || !q.question) continue;
+
+      let options = Array.isArray(q.options) ? q.options.map(String) : [];
+      if (options.length < 2) continue;
+      while (options.length < 4) {
+        options.push(`Option ${String.fromCharCode(65 + options.length)}`);
+      }
+      if (options.length > 4) {
+        options = options.slice(0, 4);
       }
 
-      if (
-        question.correctAnswer < 0 ||
-         question.correctAnswer > 3 ||
-        !Number.isInteger(question.correctAnswer)
-      ) {
-        return NextResponse.json(
-          {
-            error: `Invalid correct answer at question ${
-              i + 1
-            }.`,
-          },
-          { status: 502 }
-        );
+      let correctIndex = typeof q.correctAnswer === "number" ? q.correctAnswer : parseInt(q.correctAnswer, 10);
+      if (isNaN(correctIndex) || correctIndex < 0 || correctIndex > 3) {
+        correctIndex = 0;
       }
 
-      // First 5 must be easy
-      if (
-        i < 5 &&
-        question.difficulty !== "easy"
-      ) {
-        return NextResponse.json(
-          {
-            error: `Question ${
-              i + 1
-            } must be easy.`,
-          },
-          { status: 502 }
-        );
+      let diff = String(q.difficulty || (normalizedQuestions.length < 5 ? "easy" : "medium")).toLowerCase();
+      if (!["easy", "medium", "hard"].includes(diff)) {
+        diff = normalizedQuestions.length < 5 ? "easy" : "medium";
       }
 
-      if (
-        i >= 5 &&
-        !["medium", "hard"].includes(
-          question.difficulty
-        )
-      ) {
-        return NextResponse.json(
-          {
-            error: `Question ${
-              i + 1
-            } must be medium or hard.`,
-          },
-          { status: 502 }
-        );
-      }
+      normalizedQuestions.push({
+        question: String(q.question),
+        options,
+        correctAnswer: correctIndex,
+        explanation: String(q.explanation || "Correct concept application."),
+        concept: String(q.concept || topic.name),
+        difficulty: diff,
+      });
+    }
+
+    if (normalizedQuestions.length < 3) {
+      return NextResponse.json(
+        {
+          error: "Failed to generate sufficient valid questions.",
+        },
+        { status: 502 }
+      );
     }
 
     // -----------------------------
@@ -327,7 +302,7 @@ correctAnswer is the zero-based index of the correct option.
     const saveQuestions = db.transaction(() => {
       const savedQuestions = [];
 
-       for (const question of generatedBattle.questions) {
+      for (const question of normalizedQuestions) {
         const result = insertQuestion.run(
           topic.id,
           question.question,
@@ -371,9 +346,11 @@ correctAnswer is the zero-based index of the correct option.
         .prepare(`
           INSERT INTO battles (
             topic_id,
+            level,
             questions
           )
-          VALUES (?, ?)
+          VALUES (?, 1, ?)
+          ON CONFLICT(topic_id, level) DO UPDATE SET questions = excluded.questions
         `)
         .run(
           id,
