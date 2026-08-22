@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import ai from "@/lib/gemini";
+import { generateWithFallback, cleanAndParseJSON } from "@/lib/gemini";
 import db from "@/lib/db.js";
 
 const ALLOWED_TYPES = [
@@ -150,9 +150,7 @@ Return exactly:
     // 5. Send files to Gemini
     // -----------------------------
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-
+    const response = await generateWithFallback({
       contents: [
         {
           role: "user",
@@ -164,7 +162,6 @@ Return exactly:
           ],
         },
       ],
-
       config: {
         responseMimeType: "application/json",
       },
@@ -183,14 +180,15 @@ Return exactly:
     let syllabus;
 
     try {
-      syllabus = JSON.parse(response.text);
+      syllabus = cleanAndParseJSON(response.text);
     } catch (error) {
-      console.error("Invalid Gemini JSON:");
+      console.error("Invalid Gemini JSON:", error.message);
       console.error(response.text);
 
       return NextResponse.json(
         {
           error: "Gemini returned invalid JSON.",
+          details: error.message,
           raw: response.text,
         },
         {

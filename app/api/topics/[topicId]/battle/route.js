@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import ai from "@/lib/gemini";
+import { generateWithFallback, cleanAndParseJSON } from "@/lib/gemini";
 import db from "@/lib/db.js";
 
 export async function POST(request, { params }) {
@@ -177,9 +177,7 @@ Return exactly:
 correctAnswer is the zero-based index of the correct option.
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-
+    const response = await generateWithFallback({
       contents: [
         {
           role: "user",
@@ -190,7 +188,6 @@ correctAnswer is the zero-based index of the correct option.
           ],
         },
       ],
-
       config: {
         responseMimeType: "application/json",
       },
@@ -204,17 +201,18 @@ correctAnswer is the zero-based index of the correct option.
     // 3. Parse Gemini JSON
     // -----------------------------
 
-     let generatedBattle;
+    let generatedBattle;
 
     try {
-      generatedBattle = JSON.parse(response.text);
+      generatedBattle = cleanAndParseJSON(response.text);
     } catch (error) {
-      console.error("Invalid Gemini JSON:");
+      console.error("Invalid Gemini JSON:", error.message);
       console.error(response.text);
 
       return NextResponse.json(
         {
           error: "Gemini returned invalid JSON.",
+          details: error.message,
           raw: response.text,
         },
         { status: 502 }

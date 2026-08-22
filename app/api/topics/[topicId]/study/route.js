@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import ai from "@/lib/gemini";
+import { generateWithFallback, cleanAndParseJSON } from "@/lib/gemini";
 import db from "@/lib/db.js";
 
 export async function POST(request, { params }) {
@@ -354,9 +354,7 @@ Return ONLY valid JSON.
     // 4. Call Gemini
     // -----------------------------
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-
+    const response = await generateWithFallback({
       contents: [
         {
           role: "user",
@@ -367,7 +365,6 @@ Return ONLY valid JSON.
           ],
         },
       ],
-
       config: {
         responseMimeType: "application/json",
       },
@@ -386,10 +383,11 @@ Return ONLY valid JSON.
     let studyPack;
 
     try {
-      studyPack = JSON.parse(response.text);
+      studyPack = cleanAndParseJSON(response.text);
     } catch (error) {
       console.error(
-        "Invalid Gemini study pack JSON:"
+        "Invalid Gemini study pack JSON:",
+        error.message
       );
 
       console.error(response.text);
@@ -398,6 +396,7 @@ Return ONLY valid JSON.
         {
           error:
             "Gemini returned invalid study pack JSON.",
+          details: error.message,
           raw: response.text,
         },
         {
