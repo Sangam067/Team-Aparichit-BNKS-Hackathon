@@ -151,7 +151,7 @@ Return exactly:
     // -----------------------------
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
 
       contents: [
         {
@@ -295,27 +295,36 @@ Return exactly:
           ? chapter.topics
           : [];
 
-        for (
-          let topicIndex = 0;
-          topicIndex < topics.length;
-          topicIndex++
-        ) {
-          const topic = topics[topicIndex];
-
-          const topicName =
-            typeof topic === "string"
-              ? topic
-              : topic?.name;
-
-          if (!topicName) {
-            continue;
-          }
-
+        if (topics.length === 0) {
+          // If no specific subtopics, treat the chapter as the main topic
           insertTopic.run(
             chapterId,
-            topicName,
-            topicIndex + 1
+            chapter.name,
+            1
           );
+        } else {
+          for (
+            let topicIndex = 0;
+            topicIndex < topics.length;
+            topicIndex++
+          ) {
+            const topic = topics[topicIndex];
+
+            const topicName =
+              typeof topic === "string"
+                ? topic
+                : topic?.name;
+
+            if (!topicName) {
+              continue;
+            }
+
+            insertTopic.run(
+              chapterId,
+              topicName,
+              topicIndex + 1
+            );
+          }
         }
       }
 

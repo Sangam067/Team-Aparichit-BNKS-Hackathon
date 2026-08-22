@@ -78,24 +78,44 @@ export async function GET(request, { params }) {
     // Build hierarchy
     // -----------------------------
 
+    const insertDefaultTopic = db.prepare(`
+      INSERT INTO topics (chapter_id, name, order_index)
+      VALUES (?, ?, 1)
+    `);
+
     const result = {
       id: subject.id,
       name: subject.name,
       createdAt: subject.created_at,
 
-      chapters: chapters.map((chapter) => ({
-        id: chapter.id,
-        chapterNumber: chapter.chapter_number,
-        name: chapter.name,
+      chapters: chapters.map((chapter) => {
+        let topicList = getTopics.all(chapter.id);
 
-        topics: getTopics
-          .all(chapter.id)
-          .map((topic) => ({
+        if (topicList.length === 0) {
+          try {
+            const insRes = insertDefaultTopic.run(chapter.id, chapter.name);
+            topicList = [{
+              id: Number(insRes.lastInsertRowid),
+              name: chapter.name,
+              order_index: 1,
+            }];
+          } catch {
+            // fallback
+          }
+        }
+
+        return {
+          id: chapter.id,
+          chapterNumber: chapter.chapter_number,
+          name: chapter.name,
+
+          topics: topicList.map((topic) => ({
             id: topic.id,
             name: topic.name,
             orderIndex: topic.order_index,
           })),
-      })),
+        };
+      }),
     };
 
     return NextResponse.json({

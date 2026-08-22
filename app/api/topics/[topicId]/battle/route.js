@@ -112,7 +112,7 @@ correctAnswer is the zero-based index of the correct option.
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
 
       contents: [
         {

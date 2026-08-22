@@ -269,9 +269,21 @@ function LearningContent() {
                       </div>
                       <h2>{chapter.name}</h2>
                     </div>
-                    <span style={{ fontSize: 13, color: "var(--accent)", fontWeight: 700 }}>
-                      {chapterTopics.length} Topics
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, color: "var(--accent)", fontWeight: 700 }}>
+                        {chapterTopics.length} {chapterTopics.length === 1 ? "Section" : "Topics"}
+                      </span>
+                      {chapterTopics.length > 0 && (
+                        <button
+                          type="button"
+                          className="button button-small button-ghost"
+                          style={{ border: "1px solid var(--accent-border)", color: "var(--accent)", fontSize: 12, padding: "5px 12px", minHeight: 32 }}
+                          onClick={() => openTopicStudy(chapterTopics[0])}
+                        >
+                          📖 Study Chapter
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Vertical Circular Nodes Flow */}
