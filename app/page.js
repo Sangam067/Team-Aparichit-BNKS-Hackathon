@@ -4,9 +4,23 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+function normalizeRoadmapStatus(index, total) {
+  if (total === 0) {
+    return "locked";
+  }
+
+  if (index === 0) {
+    return "unlocked";
+  }
+
+  return "locked";
+}
+
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [dashboard, setDashboard] = useState(null);
+  const [roadmaps, setRoadmaps] = useState({});
+  const [openSubjectIds, setOpenSubjectIds] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -45,6 +59,71 @@ export default function StudentDashboardPage() {
       router.replace("/login");
     }
   }, [router]);
+
+  useEffect(() => {
+    if (!dashboard?.subjects?.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadRoadmaps() {
+      try {
+        const subjectRoadmaps = await Promise.all(
+          dashboard.subjects.map(async (subject) => {
+            try {
+              const response = await fetch(`/api/curriculum/${subject.id}`);
+              const data = await response.json();
+
+              if (!response.ok || !data?.subject?.chapters) {
+                return {
+                  subjectId: subject.id,
+                  chapters: [],
+                };
+              }
+
+              return {
+                subjectId: subject.id,
+                chapters: data.subject.chapters.map((chapter) => ({
+                  ...chapter,
+                  topics: (chapter.topics || []).map((topic, topicIndex) => ({
+                    ...topic,
+                    status: normalizeRoadmapStatus(topicIndex, (chapter.topics || []).length),
+                    unlocked: topicIndex === 0,
+                  })),
+                })),
+              };
+            } catch (error) {
+              console.error(`Failed to load roadmap for subject ${subject.id}:`, error);
+              return {
+                subjectId: subject.id,
+                chapters: [],
+              };
+            }
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextRoadmaps = {};
+        subjectRoadmaps.forEach((entry) => {
+          nextRoadmaps[entry.subjectId] = entry.chapters;
+        });
+
+        setRoadmaps(nextRoadmaps);
+      } catch (error) {
+        console.error("Roadmap load error:", error);
+      }
+    }
+
+    loadRoadmaps();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboard?.subjects]);
 
   if (loading) {
     return (
@@ -90,11 +169,20 @@ export default function StudentDashboardPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-sm">
-              <p className="text-xs uppercase tracking-[0.18em] text-blue-100">
-                Current learning summary
-              </p>
-              <p className="mt-2 text-lg font-semibold">{learningSummary}</p>
+            <div className="flex flex-col gap-3">
+              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-blue-100">
+                  Current learning summary
+                </p>
+                <p className="mt-2 text-lg font-semibold">{learningSummary}</p>
+              </div>
+
+              <Link
+                href="/test-syllabus"
+                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-200"
+              >
+                Upload syllabus
+              </Link>
             </div>
           </div>
         </header>
@@ -162,12 +250,20 @@ export default function StudentDashboardPage() {
                 <p className="mt-2 text-slate-600">
                   Choose a subject and begin your first level.
                 </p>
-                <Link
-                  href="/test-learning"
-                  className="mt-5 inline-flex items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-200"
-                >
-                  Browse subjects
-                </Link>
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                  <Link
+                    href="/test-learning"
+                    className="inline-flex items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                  >
+                    Browse subjects
+                  </Link>
+                  <Link
+                    href="/test-syllabus"
+                    className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200"
+                  >
+                    Upload syllabus
+                  </Link>
+                </div>
               </div>
             )}
           </div>
@@ -207,12 +303,20 @@ export default function StudentDashboardPage() {
               </p>
               <h2 className="mt-2 text-2xl font-bold">Your learning path</h2>
             </div>
-            <Link
-              href="/test-learning"
-              className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              Browse all
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/test-learning"
+                className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Browse all
+              </Link>
+              <Link
+                href="/test-syllabus"
+                className="inline-flex items-center rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+              >
+                Upload syllabus
+              </Link>
+            </div>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -251,6 +355,94 @@ export default function StudentDashboardPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Progression
+              </p>
+              <h2 className="mt-2 text-xl font-bold">Learning roadmap</h2>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {subjects.map((subject) => {
+              const chapters = roadmaps[subject.id] || [];
+              const isOpen = Boolean(openSubjectIds[subject.id]);
+
+              return (
+                <div key={subject.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenSubjectIds((prev) => ({
+                        ...prev,
+                        [subject.id]: !prev[subject.id],
+                      }))
+                    }
+                    className="flex w-full items-center justify-between gap-3 text-left"
+                  >
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">Subject</p>
+                      <h3 className="mt-1 text-base font-semibold text-slate-900">{subject.name}</h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-700 shadow-sm">
+                        {subject.progress}%
+                      </span>
+                      <span className="text-sm text-slate-500">{isOpen ? "−" : "+"}</span>
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="mt-3">
+                      {chapters.length > 0 ? (
+                        <div className="space-y-3">
+                          {chapters.map((chapter) => (
+                            <div key={chapter.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                              <h4 className="text-sm font-semibold text-slate-800">
+                                Chapter {chapter.chapterNumber || 1} — {chapter.name}
+                              </h4>
+
+                              <div className="mt-3 space-y-2 border-l border-slate-200 pl-3">
+                                {chapter.topics.map((topic, topicIndex) => {
+                                  const isUnlocked = topic.status === "unlocked" || topic.unlocked;
+
+                                  return (
+                                    <div key={`${chapter.id}-${topic.id || topicIndex}`} className="relative">
+                                      <div className="absolute left-[-11px] top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-slate-200" />
+                                      <div
+                                        className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm ${
+                                          isUnlocked
+                                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                            : "border-slate-200 bg-slate-50 text-slate-500"
+                                        }`}
+                                      >
+                                        <span className="text-sm" aria-label={isUnlocked ? "Unlocked" : "Locked"}>
+                                          {isUnlocked ? "✅" : "🔒"}
+                                        </span>
+                                        <span className="font-medium">{topic.name}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-600">
+                          No chapter structure available yet. Upload a syllabus to populate this roadmap.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 

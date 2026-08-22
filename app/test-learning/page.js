@@ -1,22 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+
+function getTopicStatus(index, total) {
+  if (!total) return "locked";
+  return index === 0 ? "unlocked" : "locked";
+}
 
 export default function TestLearningPage() {
+  const router = useRouter();
   const [subjects, setSubjects] = useState([]);
-  const [chapters, setChapters] = useState([]);
-  const [topics, setTopics] = useState([]);
-
-  const [subjectId, setSubjectId] = useState("");
-  const [chapterId, setChapterId] = useState("");
-  const [topicId, setTopicId] = useState("");
-
+  const [curriculum, setCurriculum] = useState([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState("");
+  const [selectedChapterId, setSelectedChapterId] = useState("");
+  const [selectedTopicId, setSelectedTopicId] = useState("");
   const [studyPack, setStudyPack] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  // -----------------------------
-  // Load subjects
-  // -----------------------------
+  const [curriculumLoading, setCurriculumLoading] = useState(false);
+  const lessonRef = useRef(null);
 
   useEffect(() => {
     async function loadSubjects() {
@@ -26,6 +29,10 @@ export default function TestLearningPage() {
 
         if (data.success) {
           setSubjects(data.subjects);
+
+          if (data.subjects[0]) {
+            setSelectedSubjectId(String(data.subjects[0].id));
+          }
         }
       } catch (error) {
         console.error("Failed to load subjects:", error);
@@ -35,69 +42,90 @@ export default function TestLearningPage() {
     loadSubjects();
   }, []);
 
-  // -----------------------------
-  // Subject changed
-  // -----------------------------
-
-  async function handleSubjectChange(value) {
-    setSubjectId(value);
-    setChapterId("");
-    setTopicId("");
-    setChapters([]);
-    setTopics([]);
-    setStudyPack(null);
-
-    if (!value) return;
-
-    try {
-      const response = await fetch(`/api/curriculum/${value}`);
-      const data = await response.json();
-
-      if (data.success) {
-        setChapters(data.subject.chapters);
-      }
-    } catch (error) {
-      console.error("Failed to load chapters:", error);
+  useEffect(() => {
+    if (!selectedSubjectId) {
+      return;
     }
-  }
 
-  // -----------------------------
-  // Chapter changed
-  // -----------------------------
+    async function loadCurriculum() {
+      setCurriculumLoading(true);
+      setSelectedChapterId("");
+      setSelectedTopicId("");
+      setStudyPack(null);
 
-  function handleChapterChange(value) {
-    setChapterId(value);
-    setTopicId("");
-    setStudyPack(null);
+      try {
+        const response = await fetch(`/api/curriculum/${selectedSubjectId}`);
+        const data = await response.json();
 
-    const chapter = chapters.find(
-      (chapter) => String(chapter.id) === value
-    );
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load subject curriculum.");
+        }
 
-    setTopics(chapter?.topics || []);
-  }
+        if (data.success) {
+          const subjectChapters = (data.subject?.chapters || []).map((chapter) => ({
+            ...chapter,
+            topics: (chapter.topics || []).map((topic, topicIndex) => ({
+              ...topic,
+              status: getTopicStatus(topicIndex, (chapter.topics || []).length),
+              unlocked: topicIndex === 0,
+            })),
+          }));
 
-  // -----------------------------
-  // Generate study pack
-  // -----------------------------
+          setCurriculum(subjectChapters);
+
+          if (subjectChapters[0]?.topics?.[0]) {
+            const firstChapter = subjectChapters[0];
+            const firstTopic = firstChapter.topics[0];
+            setSelectedChapterId(String(firstChapter.id));
+            setSelectedTopicId(String(firstTopic.id));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load curriculum:", error);
+      } finally {
+        setCurriculumLoading(false);
+      }
+    }
+
+    loadCurriculum();
+  }, [selectedSubjectId]);
+
+  const selectedSubject = subjects.find(
+    (subject) => String(subject.id) === selectedSubjectId
+  );
+
+  const selectedChapter = curriculum.find(
+    (chapter) => String(chapter.id) === selectedChapterId
+  );
+
+  const selectedTopic = (selectedChapter?.topics || []).find(
+    (topic) => String(topic.id) === selectedTopicId
+  );
+
+  useEffect(() => {
+    if (studyPack && lessonRef.current) {
+      lessonRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [studyPack]);
 
   async function generateStudyPack() {
-    if (!topicId) return;
+    if (!selectedTopicId) return;
 
     setLoading(true);
     setStudyPack(null);
 
     try {
-      const response = await fetch(`/api/topics/${topicId}/study`, {
+      const response = await fetch(`/api/topics/${selectedTopicId}/study`, {
         method: "POST",
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to generate study pack."
-        );
+        throw new Error(data.error || "Failed to generate study pack.");
       }
 
       setStudyPack(data.studyPack);
@@ -110,307 +138,263 @@ export default function TestLearningPage() {
   }
 
   return (
-    <main
-      style={{
-        maxWidth: "800px",
-        margin: "40px auto",
-        padding: "20px",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <h1>Learning Pathway Test</h1>
+    <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="rounded-[28px] bg-gradient-to-br from-emerald-500 via-lime-500 to-amber-400 p-6 text-white shadow-lg shadow-emerald-500/20 sm:p-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-50">
+                Learn
+              </p>
+              <h1 className="mt-2 text-3xl font-black sm:text-4xl">Choose your path</h1>
+            </div>
 
-      <p>
-        Test the Subject → Chapter → Topic → Theory pathway.
-      </p>
-
-      {/* Subject */}
-
-      <div style={{ marginTop: "30px" }}>
-        <label>
-          <strong>Subject</strong>
-        </label>
-
-        <select
-          value={subjectId}
-          onChange={(e) =>
-            handleSubjectChange(e.target.value)
-          }
-          style={{
-            display: "block",
-            width: "100%",
-            padding: "10px",
-            marginTop: "8px",
-          }}
-        >
-          <option value="">Select a subject</option>
-
-          {subjects.map((subject) => (
-            <option
-              key={subject.id}
-              value={subject.id}
-            >
-              {subject.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Chapter */}
-
-      <div style={{ marginTop: "20px" }}>
-        <label>
-          <strong>Chapter</strong>
-        </label>
-
-        <select
-          value={chapterId}
-          onChange={(e) =>
-            handleChapterChange(e.target.value)
-          }
-          disabled={!subjectId}
-          style={{
-            display: "block",
-            width: "100%",
-            padding: "10px",
-            marginTop: "8px",
-          }}
-        >
-          <option value="">Select a chapter</option>
-
-          {chapters.map((chapter) => (
-            <option
-              key={chapter.id}
-              value={chapter.id}
-            >
-              {chapter.chapterNumber}. {chapter.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Topic */}
-
-      <div style={{ marginTop: "20px" }}>
-        <label>
-          <strong>Topic</strong>
-        </label>
-
-        <select
-          value={topicId}
-          onChange={(e) => {
-            setTopicId(e.target.value);
-            setStudyPack(null);
-          }}
-          disabled={!chapterId}
-          style={{
-            display: "block",
-            width: "100%",
-            padding: "10px",
-            marginTop: "8px",
-          }}
-        >
-          <option value="">Select a topic</option>
-
-          {topics.map((topic) => (
-            <option
-              key={topic.id}
-              value={topic.id}
-            >
-              {topic.orderIndex}. {topic.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Selected topic */}
-
-      {topicId && (
-        <div
-          style={{
-            marginTop: "25px",
-            padding: "15px",
-            background: "#f3f4f6",
-            borderRadius: "8px",
-          }}
-        >
-          <strong>Selected Topic:</strong>
-
-          <div style={{ marginTop: "5px" }}>
-            {
-              topics.find(
-                (topic) =>
-                  String(topic.id) === topicId
-              )?.name
-            }
+            <div className="rounded-2xl border border-white/25 bg-white/10 px-4 py-3 backdrop-blur-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-emerald-50">Current subject</p>
+              <p className="mt-2 text-lg font-bold">
+                {selectedSubject ? selectedSubject.name : "Select a subject"}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        </header>
 
-      {/* Generate */}
+        <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_1.8fr]">
+          <aside className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:sticky xl:top-6 xl:self-start">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Subjects</p>
+              <h2 className="mt-2 text-2xl font-bold">Explore</h2>
+            </div>
 
-      <button
-        onClick={generateStudyPack}
-        disabled={!topicId || loading}
-        style={{
-          marginTop: "25px",
-          padding: "12px 20px",
-          cursor:
-            !topicId || loading
-              ? "not-allowed"
-              : "pointer",
-        }}
-      >
-        {loading
-          ? "Generating..."
-          : "Generate Study Pack"}
-      </button>
+            <div className="space-y-3">
+              {subjects.map((subject) => {
+                const isSelected = String(subject.id) === selectedSubjectId;
 
-      {/* Study Pack */}
-
-      {studyPack && (
-        <div style={{ marginTop: "40px" }}>
-
-          {/* THEORY */}
-
-          <section>
-            <h2>Theory</h2>
-
-            <p>
-              {studyPack.theory.summary}
-            </p>
-
-            <h3>Key Points</h3>
-
-            <ul>
-              {studyPack.theory.keyPoints.map(
-                (point, index) => (
-                  <li key={index}>
-                    {point}
-                  </li>
-                )
-              )}
-            </ul>
-          </section>
-
-          {/* EXAMPLES */}
-
-          <section
-            style={{ marginTop: "30px" }}
-          >
-            <h2>Examples</h2>
-
-            {studyPack.examples.map(
-              (example, index) => (
-                <div key={index}>
-                  <p>
-                    <strong>
-                      Question:
-                    </strong>{" "}
-                    {example.question}
-                  </p>
-
-                  <p>
-                    <strong>
-                      Solution:
-                    </strong>{" "}
-                    {example.solution}
-                  </p>
-                </div>
-              )
-            )}
-          </section>
-
-          {/* FORMULAS */}
-
-          <section
-            style={{ marginTop: "30px" }}
-          >
-            <h2>Formulas</h2>
-
-            {studyPack.formulas.map(
-              (formula, index) => (
-                <div key={index}>
-                  <pre>
-                    {formula.formula}
-                  </pre>
-
-                  <p>
-                    {formula.meaning}
-                  </p>
-                </div>
-              )
-            )}
-          </section>
-
-          {/* YOUTUBE RESOURCES */}
-
-          <section
-            style={{ marginTop: "30px" }}
-          >
-            <h2>YouTube Resources</h2>
-
-            {studyPack.youtubeResources.map(
-              (resource, index) => (
-                <div key={index}>
-                  <h3>
-                    {resource.title}
-                  </h3>
-
-                  <p>
-                    <strong>
-                      Level:
-                    </strong>{" "}
-                    {resource.level}
-                  </p>
-
-                  <p>
-                    <strong>
-                      Recommended length:
-                    </strong>{" "}
-                    {resource.recommendedLength}
-                  </p>
-
-                  <a
-                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(
-                      resource.searchQuery
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                return (
+                  <button
+                    key={subject.id}
+                    type="button"
+                    onClick={() => setSelectedSubjectId(String(subject.id))}
+                    className={`w-full rounded-2xl border p-4 text-left transition ${
+                      isSelected
+                        ? "border-emerald-300 bg-emerald-50 shadow-sm ring-2 ring-emerald-100"
+                        : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100"
+                    }`}
                   >
-                    🔎 Search YouTube
-                  </a>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+                          Subject
+                        </p>
+                        <p className="mt-2 text-lg font-semibold text-slate-900">{subject.name}</p>
+                      </div>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">
+                        {isSelected ? "Open" : "View"}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Roadmap</p>
+                <h2 className="mt-2 text-2xl font-bold">{selectedSubject ? selectedSubject.name : "Select a subject"}</h2>
+              </div>
+              <Link
+                href="/"
+                className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Dashboard
+              </Link>
+            </div>
+
+            {curriculumLoading ? (
+              <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-600">
+                Loading chapters and topics...
+              </div>
+            ) : !curriculum.length ? (
+              <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-600">
+                No syllabus loaded for this subject yet.
+              </div>
+            ) : (
+              <div className="mt-6 space-y-5">
+                {curriculum.map((chapter) => (
+                  <div key={chapter.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-lg font-bold text-slate-900">
+                        Chapter {chapter.chapterNumber || 1} — {chapter.name}
+                      </h3>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">
+                        {chapter.topics?.length || 0} topics
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {chapter.topics.map((topic, topicIndex) => {
+                        const isSelected = String(topic.id) === selectedTopicId;
+                        const isUnlocked = topic.status === "unlocked" || topic.unlocked;
+
+                        return (
+                          <button
+                            key={topic.id}
+                            type="button"
+                            disabled={!isUnlocked}
+                            onClick={() => {
+                              if (!isUnlocked) return;
+                              setSelectedChapterId(String(chapter.id));
+                              setSelectedTopicId(String(topic.id));
+                              setStudyPack(null);
+                            }}
+                            className={`group relative rounded-2xl border p-3 text-left transition ${
+                              isSelected
+                                ? "border-emerald-300 bg-emerald-50 shadow-sm"
+                                : isUnlocked
+                                  ? "border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/30"
+                                  : "border-slate-200 bg-slate-200/70 text-slate-400"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-lg" aria-label={isUnlocked ? "Unlocked" : "Locked"}>
+                                {isUnlocked ? "✅" : "🔒"}
+                              </span>
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">
+                                {isUnlocked ? "Learn" : "Locked"}
+                              </span>
+                            </div>
+
+                            <p className="mt-3 text-base font-semibold leading-snug text-slate-900">
+                              {topic.name}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {topicIndex === 0 ? "Start here" : "Continue when ready"}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedTopic && (
+              <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Selected Topic</p>
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">{selectedTopic.name}</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {selectedChapter ? `${selectedChapter.name}` : "Chapter"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={generateStudyPack}
+                    disabled={loading}
+                    className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                  >
+                    {loading ? "Loading..." : "Open lesson"}
+                  </button>
                 </div>
-              )
+              </div>
             )}
           </section>
-
-          {/* BATTLE */}
-
-          <section
-            style={{ marginTop: "40px" }}
-          >
-            <button
-              onClick={() => {
-                window.location.href =
-                  `/test-learning/battle/levels?topicId=${topicId}`;
-              }}
-              style={{
-                padding: "12px 20px",
-                border: "none",
-                borderRadius: "10px",
-                background: "#2563eb",
-                color: "#ffffff",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              ⚔️ Choose Battle Level
-            </button>
-          </section>
-
         </div>
-      )}
+
+        {studyPack && (
+          <section ref={lessonRef} className="mt-8 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Lesson</p>
+                <h2 className="mt-2 text-2xl font-bold">{selectedTopic?.name}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  router.push(`/test-learning/battle/levels?topicId=${selectedTopicId}`);
+                }}
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Battle mode
+              </button>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-lg font-bold text-slate-900">Theory</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-700">{studyPack.theory.summary}</p>
+                <ul className="mt-4 space-y-2 text-sm text-slate-700">
+                  {studyPack.theory.keyPoints.map((point, index) => (
+                    <li key={index} className="flex gap-2">
+                      <span className="mt-1 text-emerald-600">•</span>
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-lg font-bold text-slate-900">Examples</h3>
+                <div className="mt-3 space-y-4 text-sm text-slate-700">
+                  {studyPack.examples.map((example, index) => (
+                    <div key={index} className="rounded-xl bg-white p-3">
+                      <p className="font-semibold text-slate-900">Question</p>
+                      <p className="mt-1">{example.question}</p>
+                      <p className="mt-3 font-semibold text-slate-900">Solution</p>
+                      <p className="mt-1">{example.solution}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {studyPack.formulas?.length > 0 && (
+              <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-lg font-bold text-slate-900">Formulas</h3>
+                <div className="mt-4 space-y-3">
+                  {studyPack.formulas.map((formula, index) => (
+                    <div key={index} className="rounded-xl bg-white p-3">
+                      <pre className="overflow-x-auto whitespace-pre-wrap text-sm font-mono text-slate-900">
+                        {formula.formula}
+                      </pre>
+                      <p className="mt-2 text-sm text-slate-700">{formula.meaning}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {studyPack.youtubeResources?.length > 0 && (
+              <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-lg font-bold text-slate-900">Helpful videos</h3>
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {studyPack.youtubeResources.map((resource, index) => (
+                    <div key={index} className="rounded-xl bg-white p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        {resource.level}
+                      </p>
+                      <p className="mt-2 font-semibold text-slate-900">{resource.title}</p>
+                      <p className="mt-2 text-xs text-slate-500">{resource.recommendedLength}</p>
+                      <a
+                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(resource.searchQuery)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
+                      >
+                        Search YouTube →
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+      </div>
     </main>
   );
 }
