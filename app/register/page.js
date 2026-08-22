@@ -46,8 +46,8 @@ export default function RegisterPage() {
         JSON.stringify(data.user)
       );
 
-      // Go to learning page
-      router.push("/test-learning");
+      // Go to student dashboard
+      router.push("/");
     } catch (error) {
       console.error("Registration error:", error);
       setError(error.message);

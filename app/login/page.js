@@ -44,8 +44,8 @@ export default function LoginPage() {
         JSON.stringify(data.user)
       );
 
-      // Go to learning page
-      router.push("/test-learning");
+      // Go to student dashboard
+      router.push("/");
     } catch (error) {
       console.error("Login error:", error);
       setError(error.message);
