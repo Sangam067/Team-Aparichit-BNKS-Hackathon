@@ -958,35 +958,96 @@ function BattleContent() {
         }
 
         /* ==============================
-           RESPONSIVE
+           RESPONSIVE - TABLET & MOBILE
            ============================== */
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
           .boss-hud-top {
-            padding: 10px 12px;
-            flex-wrap: wrap;
-            gap: 8px;
+            padding: 10px 14px;
+            gap: 10px;
           }
 
           .hud-entity {
-            min-width: 120px;
+            min-width: 160px;
+          }
+
+          .hud-name {
+            font-size: 11px;
+          }
+
+          .chalkboard-area {
+            left: 12%;
+            right: 12%;
+            top: 10%;
+            bottom: 28%;
+          }
+
+          .chalk-question-text {
+            font-size: 16px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .boss-hud-top {
+            padding: 8px 10px;
+            flex-wrap: wrap;
+            gap: 6px;
+          }
+
+          .hud-entity {
+            min-width: 0;
             flex: 1;
+          }
+
+          .hud-hp-bar {
+            height: 10px;
+          }
+
+          .hud-hp-text {
+            font-size: 10px;
+          }
+
+          .hud-name {
+            font-size: 10px;
+            margin-bottom: 4px;
           }
 
           .hud-center {
             order: -1;
             width: 100%;
-            margin-bottom: 4px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 6px;
+            margin-bottom: 2px;
           }
 
+          .hud-topic-name {
+            font-size: 12px;
+          }
+
+          .hud-qn-counter {
+            font-size: 11px;
+          }
+
+          /* On mobile the bg image doesn't show characters well,
+             so expand the question area to full width */
           .chalkboard-area {
-            top: 14%;
-            left: 4%;
-            right: 4%;
-            bottom: 4%;
+            top: 15%;
+            left: 2%;
+            right: 2%;
+            bottom: 2%;
+          }
+
+          .chalkboard-question {
+            padding: 18px 16px;
+            background: rgba(0,0,0,0.55);
+            border-radius: 12px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.08);
           }
 
           .chalk-question-text {
             font-size: 15px;
+            margin-bottom: 14px;
           }
 
           .chalk-option {
@@ -994,9 +1055,86 @@ function BattleContent() {
             font-size: 13px;
           }
 
+          .chalk-option-letter {
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+          }
+
+          .chalk-submit-btn {
+            font-size: 14px;
+            padding: 12px;
+          }
+
+          .chalk-feedback-header {
+            font-size: 13px;
+          }
+
+          .chalk-explanation {
+            font-size: 12px;
+          }
+
+          .damage-popup {
+            font-size: 26px;
+          }
+
           .boss-result-stats {
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
+          }
+
+          .boss-loading-box, .boss-result-box {
+            padding: 28px 20px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .boss-hud-top {
+            padding: 6px 8px;
+          }
+
+          .hud-hp-bar {
+            height: 8px;
+          }
+
+          .chalkboard-area {
+            top: 18%;
+            left: 1%;
+            right: 1%;
+            bottom: 1%;
+          }
+
+          .chalkboard-question {
+            padding: 14px 12px;
+          }
+
+          .chalk-qn-header {
+            margin-bottom: 8px;
+          }
+
+          .chalk-question-text {
+            font-size: 14px;
+            margin-bottom: 12px;
+          }
+
+          .chalk-options {
+            gap: 6px;
+          }
+
+          .chalk-option {
+            padding: 9px 10px;
+            font-size: 12px;
+            border-radius: 8px;
+          }
+
+          .chalk-submit-btn {
+            padding: 10px;
+            font-size: 13px;
+            border-radius: 8px;
+          }
+
+          .stat-val {
+            font-size: 20px;
           }
         }
       `}</style>
