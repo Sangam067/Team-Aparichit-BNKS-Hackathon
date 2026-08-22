@@ -60,7 +60,7 @@ export async function POST(request, { params }) {
     const prompt = `
 You are an expert educational tutor.
 
-Create a complete study pack for the following topic.
+Generate study material for this topic:
 
 Subject:
 ${topic.subject_name}
@@ -71,78 +71,74 @@ ${topic.chapter_name}
 Topic:
 ${topic.name}
 
-The student is preparing for an academic examination.
+The goal is quick revision, not a textbook-length explanation.
 
-Generate the study material in four sections:
+Return ONLY valid JSON.
 
-1. THEORY
-2. EXAMPLES
-3. FORMULAS
-4. AI RESOURCES
-
-IMPORTANT:
-
-- Be academically accurate.
-- Explain concepts clearly.
-- Assume the student is learning this topic for the first time.
-- Focus only on the requested topic.
-- Do not unnecessarily discuss unrelated topics.
-- Do not invent formulas.
-- For physics and mathematics, use LaTeX notation where appropriate.
-- Examples should help the student understand how the concept is applied.
-- AI resources should be useful concepts/resources to explore, not fabricated URLs.
-- Return ONLY valid JSON.
-- Do not use markdown code fences.
-- Do not include any text outside the JSON.
-
-Return exactly this structure:
+Use exactly this structure:
 
 {
   "topic": "${topic.name}",
 
   "theory": {
-    "overview": "...",
-    "concepts": [
-      {
-        "title": "...",
-        "explanation": "..."
-      }
-    ],
+    "summary": "A clear and concise explanation of the topic.",
     "keyPoints": [
-      "..."
+      "Important point 1",
+      "Important point 2",
+      "Important point 3"
     ]
   },
 
-  "examples": [
-    {
-      "title": "...",
-      "question": "...",
-      "solution": "...",
-      "explanation": "..."
-    }
-  ],
-
   "formulas": [
     {
-      "name": "...",
-      "formula": "...",
-      "meaning": "...",
-      "variables": [
-        {
-          "symbol": "...",
-          "meaning": "..."
-        }
-      ]
+      "formula": "formula here",
+      "meaning": "what it represents"
     }
   ],
 
-  "aiResources": [
+  "examples": [
     {
-      "title": "...",
-      "description": "..."
+      "question": "Short example question",
+      "solution": "Concise solution"
+    }
+  ],
+
+  "youtubeResources": [
+    {
+      "level": "beginner",
+      "title": "What the student should learn",
+      "searchQuery": "YouTube search query",
+      "recommendedLength": "5-10 minutes"
+    },
+    {
+      "level": "intermediate",
+      "title": "What the student should learn",
+      "searchQuery": "YouTube search query",
+      "recommendedLength": "10-20 minutes"
+    },
+    {
+      "level": "advanced",
+      "title": "What the student should learn",
+      "searchQuery": "YouTube search query",
+      "recommendedLength": "20-40 minutes"
     }
   ]
 }
+
+RULES:
+
+1. Keep the theory concise.
+2. Focus on exam-relevant concepts.
+3. Include only important formulas.
+4. Do not invent formulas.
+5. Include 1-3 useful examples.
+6. YouTube resources must be relevant to this exact topic.
+7. Do NOT invent YouTube URLs.
+8. Return YouTube search queries instead of URLs.
+9. Recommend different video lengths for different learning levels.
+10. If formulas do not apply, return an empty array.
+11. If examples do not apply, return an empty array.
+12. Return ONLY JSON.
 `;
 
     // -----------------------------
@@ -201,6 +197,8 @@ Return exactly this structure:
       );
     }
 
+    
+
     // -----------------------------
     // 6. Basic validation
     // -----------------------------
@@ -223,7 +221,9 @@ Return exactly this structure:
       !studyPack.theory ||
       !Array.isArray(studyPack.examples) ||
       !Array.isArray(studyPack.formulas) ||
-      !Array.isArray(studyPack.aiResources)
+      
+      !Array.isArray(studyPack.youtubeResources)
+
     ) {
       return NextResponse.json(
         {

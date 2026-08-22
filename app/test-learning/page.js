@@ -51,7 +51,6 @@ export default function TestLearningPage() {
 
     try {
       const response = await fetch(`/api/curriculum/${value}`);
-
       const data = await response.json();
 
       if (data.success) {
@@ -71,13 +70,15 @@ export default function TestLearningPage() {
     setTopicId("");
     setStudyPack(null);
 
-    const chapter = chapters.find((chapter) => String(chapter.id) === value);
+    const chapter = chapters.find(
+      (chapter) => String(chapter.id) === value
+    );
 
     setTopics(chapter?.topics || []);
   }
 
   // -----------------------------
-  // Generate theory
+  // Generate study pack
   // -----------------------------
 
   async function generateStudyPack() {
@@ -94,7 +95,9 @@ export default function TestLearningPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to generate study pack.");
+        throw new Error(
+          data.error || "Failed to generate study pack."
+        );
       }
 
       setStudyPack(data.studyPack);
@@ -117,7 +120,9 @@ export default function TestLearningPage() {
     >
       <h1>Learning Pathway Test</h1>
 
-      <p>Test the Subject → Chapter → Topic → Theory pathway.</p>
+      <p>
+        Test the Subject → Chapter → Topic → Theory pathway.
+      </p>
 
       {/* Subject */}
 
@@ -128,7 +133,9 @@ export default function TestLearningPage() {
 
         <select
           value={subjectId}
-          onChange={(e) => handleSubjectChange(e.target.value)}
+          onChange={(e) =>
+            handleSubjectChange(e.target.value)
+          }
           style={{
             display: "block",
             width: "100%",
@@ -139,7 +146,10 @@ export default function TestLearningPage() {
           <option value="">Select a subject</option>
 
           {subjects.map((subject) => (
-            <option key={subject.id} value={subject.id}>
+            <option
+              key={subject.id}
+              value={subject.id}
+            >
               {subject.name}
             </option>
           ))}
@@ -155,7 +165,9 @@ export default function TestLearningPage() {
 
         <select
           value={chapterId}
-          onChange={(e) => handleChapterChange(e.target.value)}
+          onChange={(e) =>
+            handleChapterChange(e.target.value)
+          }
           disabled={!subjectId}
           style={{
             display: "block",
@@ -167,7 +179,10 @@ export default function TestLearningPage() {
           <option value="">Select a chapter</option>
 
           {chapters.map((chapter) => (
-            <option key={chapter.id} value={chapter.id}>
+            <option
+              key={chapter.id}
+              value={chapter.id}
+            >
               {chapter.chapterNumber}. {chapter.name}
             </option>
           ))}
@@ -198,7 +213,10 @@ export default function TestLearningPage() {
           <option value="">Select a topic</option>
 
           {topics.map((topic) => (
-            <option key={topic.id} value={topic.id}>
+            <option
+              key={topic.id}
+              value={topic.id}
+            >
               {topic.orderIndex}. {topic.name}
             </option>
           ))}
@@ -219,7 +237,12 @@ export default function TestLearningPage() {
           <strong>Selected Topic:</strong>
 
           <div style={{ marginTop: "5px" }}>
-            {topics.find((topic) => String(topic.id) === topicId)?.name}
+            {
+              topics.find(
+                (topic) =>
+                  String(topic.id) === topicId
+              )?.name
+            }
           </div>
         </div>
       )}
@@ -232,109 +255,151 @@ export default function TestLearningPage() {
         style={{
           marginTop: "25px",
           padding: "12px 20px",
-          cursor: !topicId || loading ? "not-allowed" : "pointer",
+          cursor:
+            !topicId || loading
+              ? "not-allowed"
+              : "pointer",
         }}
       >
-        {loading ? "Generating..." : "Generate Study Pack"}
+        {loading
+          ? "Generating..."
+          : "Generate Study Pack"}
       </button>
 
       {/* Study Pack */}
 
       {studyPack && (
         <div style={{ marginTop: "40px" }}>
+
           {/* THEORY */}
 
           <section>
             <h2>Theory</h2>
 
-            <p>{studyPack.theory.overview}</p>
-
-            {studyPack.theory.concepts.map((concept, index) => (
-              <div key={index}>
-                <h3>{concept.title}</h3>
-                <p>{concept.explanation}</p>
-              </div>
-            ))}
+            <p>
+              {studyPack.theory.summary}
+            </p>
 
             <h3>Key Points</h3>
 
             <ul>
-              {studyPack.theory.keyPoints.map((point, index) => (
-                <li key={index}>{point}</li>
-              ))}
+              {studyPack.theory.keyPoints.map(
+                (point, index) => (
+                  <li key={index}>
+                    {point}
+                  </li>
+                )
+              )}
             </ul>
           </section>
 
           {/* EXAMPLES */}
 
-          <section style={{ marginTop: "30px" }}>
+          <section
+            style={{ marginTop: "30px" }}
+          >
             <h2>Examples</h2>
 
-            {studyPack.examples.map((example, index) => (
-              <div key={index}>
-                <h3>{example.title}</h3>
+            {studyPack.examples.map(
+              (example, index) => (
+                <div key={index}>
+                  <p>
+                    <strong>
+                      Question:
+                    </strong>{" "}
+                    {example.question}
+                  </p>
 
-                <p>
-                  <strong>Question:</strong> {example.question}
-                </p>
-
-                <p>
-                  <strong>Solution:</strong> {example.solution}
-                </p>
-
-                <p>{example.explanation}</p>
-              </div>
-            ))}
+                  <p>
+                    <strong>
+                      Solution:
+                    </strong>{" "}
+                    {example.solution}
+                  </p>
+                </div>
+              )
+            )}
           </section>
 
           {/* FORMULAS */}
 
-          <section style={{ marginTop: "30px" }}>
+          <section
+            style={{ marginTop: "30px" }}
+          >
             <h2>Formulas</h2>
 
-            {studyPack.formulas.map((formula, index) => (
-              <div key={index}>
-                <h3>{formula.name}</h3>
+            {studyPack.formulas.map(
+              (formula, index) => (
+                <div key={index}>
+                  <pre>
+                    {formula.formula}
+                  </pre>
 
-                <pre>{formula.formula}</pre>
-
-                <p>{formula.meaning}</p>
-
-                <ul>
-                  {formula.variables.map((variable, variableIndex) => (
-                    <li key={variableIndex}>
-                      <strong>{variable.symbol}</strong>: {variable.meaning}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+                  <p>
+                    {formula.meaning}
+                  </p>
+                </div>
+              )
+            )}
           </section>
 
-          {/* AI RESOURCES */}
+          {/* YOUTUBE RESOURCES */}
 
-          <section style={{ marginTop: "30px" }}>
-            <h2>AI Resources</h2>
+          <section
+            style={{ marginTop: "30px" }}
+          >
+            <h2>YouTube Resources</h2>
 
-            {studyPack.aiResources.map((resource, index) => (
-              <div key={index}>
-                <h3>{resource.title}</h3>
-                <p>{resource.description}</p>
-              </div>
-            ))}
+            {studyPack.youtubeResources.map(
+              (resource, index) => (
+                <div key={index}>
+                  <h3>
+                    {resource.title}
+                  </h3>
+
+                  <p>
+                    <strong>
+                      Level:
+                    </strong>{" "}
+                    {resource.level}
+                  </p>
+
+                  <p>
+                    <strong>
+                      Recommended length:
+                    </strong>{" "}
+                    {resource.recommendedLength}
+                  </p>
+
+                  <a
+                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(
+                      resource.searchQuery
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    🔎 Search YouTube
+                  </a>
+                </div>
+              )
+            )}
           </section>
 
           {/* BATTLE */}
 
-          <section style={{ marginTop: "40px" }}>
+          <section
+            style={{ marginTop: "40px" }}
+          >
             <button
               onClick={() => {
-                window.location.href = `/test-learning/battle?topicId=${topicId}`;
+                window.location.href =
+                  `/test-learning/battle?topicId=${topicId}`;
               }}
             >
               ⚔️ Start Battle
             </button>
           </section>
+
         </div>
       )}
     </main>
