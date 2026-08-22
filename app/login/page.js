@@ -45,8 +45,8 @@ export default function LoginPage() {
         JSON.stringify(data.user)
       );
 
-      // Go to learning page
-      router.push("/test-learning");
+      // Go directly to syllabus upload
+      router.push("/syllabus");
     } catch (error) {
       console.error("Login error:", error);
       setError(error.message);
