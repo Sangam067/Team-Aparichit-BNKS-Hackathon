@@ -54,7 +54,58 @@ export async function POST(request, { params }) {
     }
 
     // -----------------------------
-    // 3. Gemini prompt
+    // 3. CHECK SQLITE CACHE
+    // -----------------------------
+
+    const existingTheory = db
+      .prepare(`
+        SELECT content
+        FROM theories
+        WHERE topic_id = ?
+        LIMIT 1
+      `)
+      .get(id);
+
+    if (existingTheory) {
+      console.log(
+        `Returning cached study pack for topic ${id}`
+      );
+
+      let studyPack;
+
+      try {
+        studyPack = JSON.parse(existingTheory.content);
+      } catch (error) {
+        console.error(
+          "Failed to parse cached study pack:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            error: "Stored study pack is corrupted.",
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        cached: true,
+
+        topic: {
+          id: topic.id,
+          name: topic.name,
+        },
+
+        studyPack,
+      });
+    }
+
+    // -----------------------------
+    // 4. Gemini prompt
     // -----------------------------
 
     const prompt = `
@@ -142,8 +193,12 @@ RULES:
 `;
 
     // -----------------------------
-    // 4. Call Gemini
+    // 5. Call Gemini
     // -----------------------------
+
+    console.log(
+      `Generating new study pack for topic ${id}`
+    );
 
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
@@ -151,6 +206,7 @@ RULES:
       contents: [
         {
           role: "user",
+
           parts: [
             {
               text: prompt,
@@ -171,7 +227,7 @@ RULES:
     }
 
     // -----------------------------
-    // 5. Parse Gemini response
+    // 6. Parse Gemini response
     // -----------------------------
 
     let studyPack;
@@ -197,10 +253,8 @@ RULES:
       );
     }
 
-    
-
     // -----------------------------
-    // 6. Basic validation
+    // 7. Validate study pack
     // -----------------------------
 
     if (
@@ -221,9 +275,9 @@ RULES:
       !studyPack.theory ||
       !Array.isArray(studyPack.examples) ||
       !Array.isArray(studyPack.formulas) ||
-      
-      !Array.isArray(studyPack.youtubeResources)
-
+      !Array.isArray(
+        studyPack.youtubeResources
+      )
     ) {
       return NextResponse.json(
         {
@@ -237,11 +291,31 @@ RULES:
     }
 
     // -----------------------------
-    // 7. Return study pack
+    // 8. SAVE TO SQLITE
+    // -----------------------------
+
+    db.prepare(`
+      INSERT INTO theories (
+        topic_id,
+        content
+      )
+      VALUES (?, ?)
+    `).run(
+      id,
+      JSON.stringify(studyPack)
+    );
+
+    console.log(
+      `Study pack saved to database for topic ${id}`
+    );
+
+    // -----------------------------
+    // 9. Return study pack
     // -----------------------------
 
     return NextResponse.json({
       success: true,
+      cached: false,
 
       topic: {
         id: topic.id,
@@ -250,6 +324,7 @@ RULES:
 
       studyPack,
     });
+
   } catch (error) {
     console.error(
       "Study pack generation error:",
