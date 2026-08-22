@@ -20,6 +20,8 @@ export default function BattlePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [lastAnswerCorrect, setLastAnswerCorrect] =
+  useState(null);
   // -----------------------------
   // Load battle
   // -----------------------------
@@ -60,16 +62,79 @@ export default function BattlePage() {
   // Submit answer
   // -----------------------------
 
-  function submitAnswer() {
-    if (selectedAnswer === null) return;
+ async function submitAnswer() {
+  if (selectedAnswer === null) return;
 
-    setSubmitted(true);
+  try {
+    // -----------------------------
+    // Get logged-in user
+    // -----------------------------
+
+    const userData = localStorage.getItem("user");
+
+    if (!userData) {
+      setError("Please login before starting a battle.");
+      return;
+    }
+
+    const user = JSON.parse(userData);
+
+    if (!user?.id) {
+      setError("Invalid logged-in user.");
+      return;
+    }
+
+    // -----------------------------
+    // Current question
+    // -----------------------------
 
     const question =
       battle.questions[currentQuestion];
 
+    // -----------------------------
+    // Send answer to backend
+    // -----------------------------
+
+    const response = await fetch(
+      "/api/attempts",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          userId: user.id,
+          questionId: question.id,
+          answer: selectedAnswer,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+          "Failed to submit answer."
+      );
+    }
+
+    // -----------------------------
+    // Backend decides correctness
+    // -----------------------------
+
     const correct =
-      selectedAnswer === question.correctAnswer;
+      data.attempt.isCorrect;
+
+    setLastAnswerCorrect(correct);
+
+    setSubmitted(true);
+
+    // -----------------------------
+    // Correct answer
+    // -----------------------------
 
     if (correct) {
       setScore((prev) => prev + 1);
@@ -78,18 +143,27 @@ export default function BattlePage() {
         Math.max(prev - 10, 0)
       );
     }
+  } catch (error) {
+    console.error(
+      "Answer submission error:",
+      error
+    );
+
+    setError(error.message);
   }
+}
 
   // -----------------------------
   // Next question
   // -----------------------------
 
   function nextQuestion() {
-    setSelectedAnswer(null);
-    setSubmitted(false);
+  setSelectedAnswer(null);
+  setSubmitted(false);
+  setLastAnswerCorrect(null);
 
-    setCurrentQuestion((prev) => prev + 1);
-  }
+  setCurrentQuestion((prev) => prev + 1);
+}
 
   // -----------------------------
   // Loading
@@ -153,8 +227,10 @@ export default function BattlePage() {
     battle.questions[currentQuestion];
 
   const isCorrect =
-    submitted &&
-    selectedAnswer === question.correctAnswer;
+  submitted && lastAnswerCorrect === true;
+
+const isIncorrect =
+  submitted && lastAnswerCorrect === false;
 
   // -----------------------------
   // Battle screen
@@ -242,37 +318,48 @@ export default function BattlePage() {
           </button>
         )}
 
-        {submitted && (
-          <div style={styles.explanation}>
-            <h3>
-              {isCorrect
-                ? "✅ Correct!"
-                : "❌ Incorrect"}
-            </h3>
+       {submitted && (
+  <div style={styles.explanation}>
+    <h3>
+      {isCorrect
+        ? "✅ Correct!"
+        : "❌ Incorrect"}
+    </h3>
 
-            <p>{question.explanation}</p>
+    {!isCorrect && (
+      <p>
+        <strong>
+          Correct answer:
+        </strong>{" "}
+        {question.options[question.correctAnswer]}
+      </p>
+    )}
 
-            {currentQuestion <
-              battle.questions.length - 1 && (
-              <button
-                onClick={nextQuestion}
-                style={styles.next}
-              >
-                Next Question →
-              </button>
-            )}
+    <p>
+      {question.explanation}
+    </p>
 
-            {currentQuestion ===
-              battle.questions.length - 1 && (
-              <button
-                onClick={nextQuestion}
-                style={styles.next}
-              >
-                Finish Battle
-              </button>
-            )}
-          </div>
-        )}
+    {currentQuestion <
+      battle.questions.length - 1 && (
+      <button
+        onClick={nextQuestion}
+        style={styles.next}
+      >
+        Next Question →
+      </button>
+    )}
+
+    {currentQuestion ===
+      battle.questions.length - 1 && (
+      <button
+        onClick={nextQuestion}
+        style={styles.next}
+      >
+        Finish Battle
+      </button>
+    )}
+  </div>
+)}
       </div>
     </main>
   );
