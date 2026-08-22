@@ -41,9 +41,75 @@ export async function POST(request, { params }) {
       );
     }
 
-    // -----------------------------
-    // 2. Generate 10 questions
-    // -----------------------------
+    // --------------------------------------------------
+    // 3. CHECK BATTLE CACHE
+    // --------------------------------------------------
+    // If a battle has already been generated for this
+    // topic, return the exact same battle.
+    //
+    // Gemini will NOT be called again.
+    // --------------------------------------------------
+
+    const cachedBattle = db
+      .prepare(`
+        SELECT
+          id,
+          topic_id,
+          questions,
+          created_at
+        FROM battles
+        WHERE topic_id = ?
+      `)
+      .get(id);
+
+    if (cachedBattle) {
+      console.log(
+        `Battle loaded from database for topic ${id}.`
+      );
+
+      let questions;
+
+      try {
+        questions = JSON.parse(cachedBattle.questions);
+      } catch (error) {
+        console.error(
+          "Failed to parse cached battle JSON:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            error: "Cached battle data is corrupted.",
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        cached: true,
+
+        topic: {
+          id: topic.id,
+          name: topic.name,
+        },
+
+        battle: {
+          id: Number(cachedBattle.id),
+          topicId: Number(cachedBattle.topic_id),
+          questions,
+          createdAt: cachedBattle.created_at,
+        },
+      });
+    }
+
+    // --------------------------------------------------
+    // 4. Generate new battle with Gemini
+    // --------------------------------------------------
+
+    console.log(
+      `No cached battle found for topic ${id}. Generating...`
+    );
 
     const prompt = `
 You are an expert examination question generator.
@@ -138,10 +204,10 @@ correctAnswer is the zero-based index of the correct option.
     // 3. Parse Gemini JSON
     // -----------------------------
 
-    let battle;
+     let generatedBattle;
 
     try {
-      battle = JSON.parse(response.text);
+      generatedBattle = JSON.parse(response.text);
     } catch (error) {
       console.error("Invalid Gemini JSON:");
       console.error(response.text);
@@ -160,9 +226,9 @@ correctAnswer is the zero-based index of the correct option.
     // -----------------------------
 
     if (
-      !battle.questions ||
-      !Array.isArray(battle.questions) ||
-      battle.questions.length !== 10
+       !generatedBattle ||
+      !Array.isArray(generatedBattle.questions) ||
+      generatedBattle.questions.length !== 10
     ) {
       return NextResponse.json(
         {
@@ -172,10 +238,11 @@ correctAnswer is the zero-based index of the correct option.
       );
     }
 
-    for (let i = 0; i < battle.questions.length; i++) {
-      const question = battle.questions[i];
+    for (let i = 0; i < generatedBattle.questions.length; i++) {
+      const question = generatedBattle.questions[i];
 
       if (
+         !question ||
         !question.question ||
         !Array.isArray(question.options) ||
         question.options.length !== 4 ||
@@ -196,7 +263,8 @@ correctAnswer is the zero-based index of the correct option.
 
       if (
         question.correctAnswer < 0 ||
-        question.correctAnswer > 3
+         question.correctAnswer > 3 ||
+        !Number.isInteger(question.correctAnswer)
       ) {
         return NextResponse.json(
           {
@@ -208,8 +276,11 @@ correctAnswer is the zero-based index of the correct option.
         );
       }
 
-      // Enforce difficulty distribution ourselves.
-      if (i < 5 && question.difficulty !== "easy") {
+      // First 5 must be easy
+      if (
+        i < 5 &&
+        question.difficulty !== "easy"
+      ) {
         return NextResponse.json(
           {
             error: `Question ${
@@ -256,7 +327,7 @@ correctAnswer is the zero-based index of the correct option.
     const saveQuestions = db.transaction(() => {
       const savedQuestions = [];
 
-      for (const question of battle.questions) {
+       for (const question of generatedBattle.questions) {
         const result = insertQuestion.run(
           topic.id,
           question.question,
@@ -282,12 +353,92 @@ correctAnswer is the zero-based index of the correct option.
 
     const savedQuestions = saveQuestions();
 
-    // -----------------------------
-    // 6. Return battle
-    // -----------------------------
+    // --------------------------------------------------
+    // 9. Save complete battle to battles table
+    // --------------------------------------------------
+    //
+    // battles.questions stores the complete generated
+    // battle as JSON.
+    //
+    // Because topic_id is UNIQUE, there can only be
+    // ONE cached battle for each topic.
+    // --------------------------------------------------
+
+    let battleId;
+
+    try {
+      const battleResult = db
+        .prepare(`
+          INSERT INTO battles (
+            topic_id,
+            questions
+          )
+          VALUES (?, ?)
+        `)
+        .run(
+          id,
+          JSON.stringify(savedQuestions)
+        );
+
+      battleId = Number(
+        battleResult.lastInsertRowid
+      );
+    } catch (error) {
+      // ------------------------------------------------
+      // Possible race condition:
+      // Another request may have generated and cached
+      // the battle at almost the same time.
+      // ------------------------------------------------
+
+      console.error(
+        "Battle cache insert error:",
+        error
+      );
+
+      // Try loading the battle that already exists.
+      const existingBattle = db
+        .prepare(`
+          SELECT
+            id,
+            topic_id,
+            questions,
+            created_at
+          FROM battles
+          WHERE topic_id = ?
+        `)
+        .get(id);
+
+      if (existingBattle) {
+        return NextResponse.json({
+          success: true,
+          cached: true,
+
+          topic: {
+            id: topic.id,
+            name: topic.name,
+          },
+
+          battle: {
+            id: Number(existingBattle.id),
+            topicId: Number(existingBattle.topic_id),
+            questions: JSON.parse(
+              existingBattle.questions
+            ),
+            createdAt: existingBattle.created_at,
+          },
+        });
+      }
+
+      throw error;
+    }
+
+    // --------------------------------------------------
+    // 10. Return newly generated battle
+    // --------------------------------------------------
 
     return NextResponse.json({
       success: true,
+      cached: false,
 
       topic: {
         id: topic.id,
@@ -295,6 +446,8 @@ correctAnswer is the zero-based index of the correct option.
       },
 
       battle: {
+         id: battleId,
+        topicId: topic.id,
         questions: savedQuestions,
       },
     });

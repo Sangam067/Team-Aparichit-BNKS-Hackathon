@@ -53,11 +53,62 @@ export async function POST(request, { params }) {
       );
     }
 
-    // -----------------------------
-    // 3. Gemini prompt
+   // 3. CHECK SQLITE CACHE
     // -----------------------------
 
-    const prompt = `
+    const existingTheory = db
+      .prepare(`
+        SELECT content
+        FROM theories
+        WHERE topic_id = ?
+        LIMIT 1
+      `)
+      .get(id);
+
+    if (existingTheory) {
+      console.log(
+        `Returning cached study pack for topic ${id}`
+      );
+
+      let studyPack;
+
+      try {
+        studyPack = JSON.parse(existingTheory.content);
+      } catch (error) {
+        console.error(
+          "Failed to parse cached study pack:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            error: "Stored study pack is corrupted.",
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        cached: true,
+
+        topic: {
+          id: topic.id,
+          name: topic.name,
+        },
+
+        studyPack,
+      });
+    }
+
+    // -----------------------------
+    // 4. Gemini prompt
+    // -----------------------------
+
+  const prompt = `
+
 You are an expert educational tutor.
 
 Create a complete study pack for the following topic.
@@ -83,23 +134,174 @@ Generate the study material in four sections:
 IMPORTANT:
 
 - Be academically accurate.
-- Explain concepts clearly.
+- Explain concepts clearly but concisely.
 - Assume the student is learning this topic for the first time.
 - Focus only on the requested topic.
 - Do not unnecessarily discuss unrelated topics.
 - Do not invent formulas.
-- For physics and mathematics, use LaTeX notation where appropriate.
 - Examples should help the student understand how the concept is applied.
-- AI resources should be useful concepts/resources to explore, not fabricated URLs.
 - Return ONLY valid JSON.
 - Do not use markdown code fences.
 - Do not include any text outside the JSON.
+
+==================================================
+MATHEMATICAL / SCIENTIFIC FORMATTING
+==================================================
+
+Use LaTeX for mathematical, scientific, and chemical notation whenever appropriate.
+
+IMPORTANT LaTeX rules:
+
+- Return mathematical expressions as LaTeX strings inside the JSON.
+- Use inline LaTeX with \\(...\\).
+- Use display/block LaTeX with \\[...\\].
+- DO NOT use HTML such as <sup>, <sub>, <math>, or <span>.
+- DO NOT use Markdown code fences for mathematical expressions.
+- DO NOT use Unicode mathematical formatting when LaTeX is more appropriate.
+- Use ^ for powers.
+- Use _ for subscripts.
+- Use \\\\sqrt{} for square roots.
+- Use Greek-letter commands such as \\\\alpha, \\\\beta, \\\\theta.
+- Use \\\\sum, \\\\int, \\\\Delta, etc. where appropriate.
+- Use \\\\mathrm{} for units when appropriate.
+- Use parentheses to make expressions unambiguous.
+
+FRACTION RULE:
+
+- NEVER use \\\\frac{}{}.
+- NEVER use \\\\dfrac{}{}.
+- NEVER use any fraction command.
+- Write fractions using / instead.
+
+Examples:
+
+Correct:
+"\\\\(v = d/t\\\\)"
+
+Correct:
+"\\\\(a = (v-u)/t\\\\)"
+
+Correct:
+"\\\\(x = (a+b)/(c+d)\\\\)"
+
+Incorrect:
+"\\\\(v = \\\\frac{d}{t}\\\\)"
+
+Incorrect:
+"\\\\(x = \\\\frac{a+b}{c+d}\\\\)"
+
+Make sure all backslashes are properly escaped so that the response remains valid JSON.
+
+For example:
+
+{
+  "formula": "\\\\(F = ma\\\\)"
+}
+
+==================================================
+THEORY SECTION STYLE
+==================================================
+
+Keep theory SHORT AND SWEET.
+
+- "overview" must be 1-2 sentences maximum.
+- "concepts" should contain ONLY the most important definitions, principles, and formulas the student must know.
+- Each concept explanation should be 1-2 crisp sentences.
+- "keyPoints" should be short, punchy bullet points.
+- No fluff.
+- No unnecessary history.
+- No long derivations.
+- Save deeper explanation and step-by-step reasoning for EXAMPLES.
+
+==================================================
+EXAMPLES SECTION
+==================================================
+
+Include useful exam-oriented examples.
+
+For numerical/scientific topics:
+
+- Show the important steps.
+- Keep solutions concise but understandable.
+- Use LaTeX for equations and calculations.
+- Explain why each important step is performed.
+
+For conceptual topics:
+
+- Use short real-world or exam-style examples.
+- Explain the reasoning clearly.
+
+==================================================
+FORMULAS SECTION
+==================================================
+
+Include ONLY formulas genuinely relevant to the topic.
+
+For each formula:
+
+- "name" = name of the formula.
+- "formula" = properly formatted LaTeX expression.
+- "meaning" = what the formula represents.
+- "variables" = explain every important symbol.
+
+If the topic has no formulas, return an empty array.
+
+Remember:
+
+NEVER use \\\\frac.
+Always use / for fractions.
+
+==================================================
+AI RESOURCES / YOUTUBE
+==================================================
+
+Provide useful learning resources related to the EXACT topic.
+
+Include a mixture of:
+
+- Concepts to search for.
+- Reputable educational YouTube channels.
+- Useful video types.
+- YouTube search links.
+
+Prefer well-known educational channels such as:
+
+- Khan Academy
+- 3Blue1Brown
+- The Organic Chemistry Tutor
+- Physics Wallah
+- CrashCourse
+- MIT OpenCourseWare
+
+Only recommend a channel when it is genuinely relevant to the topic.
+
+DO NOT invent individual YouTube video URLs.
+
+Instead, generate a YouTube SEARCH URL using the topic/search query.
+
+Example:
+
+{
+  "title": "Newton's Laws — Khan Academy",
+  "description": "Search Khan Academy for an introduction to Newton's Laws.",
+  "searchQuery": "Newton's Laws Khan Academy",
+  "youtubeUrl": "https://www.youtube.com/results?search_query=Newton%27s+Laws+Khan+Academy"
+}
+
+The youtubeUrl must be a YouTube search-results URL, NOT an invented individual video URL.
+
+The searchQuery should be concise and directly related to the topic.
+
+Include approximately 3-5 useful resources.
+
+==================================================
+OUTPUT
+==================================================
 
 Return exactly this structure:
 
 {
   "topic": "${topic.name}",
-
   "theory": {
     "overview": "...",
     "concepts": [
@@ -139,12 +341,15 @@ Return exactly this structure:
   "aiResources": [
     {
       "title": "...",
-      "description": "..."
+      "description": "...",
+      "searchQuery": "...",
+      "youtubeUrl": "..."
     }
   ]
 }
-`;
 
+Return ONLY valid JSON.
+`;
     // -----------------------------
     // 4. Call Gemini
     // -----------------------------
@@ -236,12 +441,28 @@ Return exactly this structure:
       );
     }
 
+    // 8. SAVE TO SQLITE
     // -----------------------------
-    // 7. Return study pack
-    // -----------------------------
+
+    db.prepare(`
+      INSERT INTO theories (
+        topic_id,
+        content
+      )
+      VALUES (?, ?)
+    `).run(
+      id,
+      JSON.stringify(studyPack)
+    );
+
+    console.log(
+      `Study pack saved to database for topic ${id}`
+    );
+
 
     return NextResponse.json({
       success: true,
+      cached: false,
 
       topic: {
         id: topic.id,
