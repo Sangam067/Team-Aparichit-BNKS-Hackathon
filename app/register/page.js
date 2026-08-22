@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -57,96 +58,69 @@ export default function RegisterPage() {
   }
 
   return (
-    <main
-      style={{
-        maxWidth: "400px",
-        margin: "80px auto",
-        padding: "20px",
-      }}
-    >
-      <h1>Create Account</h1>
+    <main className="auth-page">
+      <div className="auth-backdrop" aria-hidden="true" />
+      <Link className="auth-brand brand" href="/" aria-label="GameEdu home">
+        <span className="brand-mark" aria-hidden="true"><span /><span /><span /></span>
+        <span>Game<span className="brand-accent">Edu</span></span>
+      </Link>
 
-      <form onSubmit={handleRegister}>
-        <div style={{ marginBottom: "15px" }}>
-          <label>Name</label>
-
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-            required
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
+      <section className="auth-panel" aria-labelledby="register-title">
+        <div className="auth-tabs" aria-label="Account access">
+          <Link className="auth-tab" href="/login">Sign in</Link>
+          <span className="auth-tab auth-tab-active">Sign up</span>
         </div>
+        <p className="auth-kicker">Start your journey</p>
+        <h1 id="register-title">Create your account</h1>
+        <p className="auth-subtitle">Build skills, earn XP, and learn by doing.</p>
 
-        <div style={{ marginBottom: "15px" }}>
-          <label>Email</label>
+        <form className="auth-form" onSubmit={handleRegister}>
+          <div className="auth-field">
+            <label htmlFor="name">Name</label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              required
+            />
+          </div>
 
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
+          <div className="auth-field">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+            />
+          </div>
 
-        <div style={{ marginBottom: "15px" }}>
-          <label>Password</label>
+          <div className="auth-field">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+            />
+          </div>
 
-          <input
-            type="password"
-            value={password}
-            onChange={(e) =>
-              setPassword(e.target.value)
-            }
-            placeholder="At least 6 characters"
-            required
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
+          {error && <p className="auth-error" role="alert">{error}</p>}
 
-        {error && (
-          <p style={{ color: "red" }}>
-            {error}
-          </p>
-        )}
+          <button className="auth-submit" type="submit" disabled={loading}>
+            {loading ? "Creating account..." : "Register"}
+            <span aria-hidden="true">↑</span>
+          </button>
+        </form>
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px",
-          }}
-        >
-          {loading
-            ? "Creating account..."
-            : "Register"}
-        </button>
-      </form>
-
-      <p>
-        Already have an account?{" "}
-        <a href="/login">Login</a>
-      </p>
+        <p className="auth-switch">Already have an account? <Link href="/login">Sign in</Link></p>
+      </section>
     </main>
   );
 }
