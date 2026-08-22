@@ -43,7 +43,7 @@ export default function Navbar() {
 
   return (
     <nav className="app-navbar">
-      <Link className="brand" href="/dashboard" aria-label="GameEdu home">
+      <Link className="brand" href="/" aria-label="GameEdu home">
         <span className="brand-mark" aria-hidden="true">
           <span />
           <span />

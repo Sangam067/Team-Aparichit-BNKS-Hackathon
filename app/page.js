@@ -58,7 +58,7 @@ export default function Home() {
           </div>
           <div className="social-proof">
             <div className="avatar-stack" aria-hidden="true"><span>AR</span><span>JL</span><span>MK</span><span>+</span></div>
-            <p><strong>10K+</strong> learners are already leveling up<span className="proof-dot">.</span></p>
+            
           </div>
         </section>
 

@@ -3,7 +3,79 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import Navbar from "../components/Navbar";
+
+const markdownPlugins = [remarkMath];
+const markdownRehypePlugins = [rehypeKatex];
+
+function normalizeStudyText(value) {
+  const text = String(value)
+    .replace(/\\\(([^]*?)\\\)/g, (_match, expression) => `$${expression}$`)
+    .replace(/\\\[([^]*?)\\\]/g, (_match, expression) => `$$${expression}$$`)
+    .replace(/<br\s*\/?>/gi, "  \n")
+    .replace(/`((?:\\\(|\\\[|\$\$)[\s\S]*?(?:\\\)|\\\]|\$\$))`/g, "$1");
+  const mathBlocks = [];
+  const textWithoutMath = text.replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*\$/g, (match) => {
+    mathBlocks.push(match);
+    return `@@MATH_${mathBlocks.length - 1}@@`;
+  });
+  let normalized = "";
+  let cursor = 0;
+
+  while (cursor < textWithoutMath.length) {
+    const opening = textWithoutMath.indexOf("(", cursor);
+    if (opening === -1) {
+      normalized += textWithoutMath.slice(cursor);
+      break;
+    }
+
+    normalized += textWithoutMath.slice(cursor, opening);
+    if (opening > 0 && textWithoutMath[opening - 1] === "\\") {
+      normalized += "(";
+      cursor = opening + 1;
+      continue;
+    }
+
+    let depth = 1;
+    let closing = opening + 1;
+    while (closing < textWithoutMath.length && depth > 0) {
+      if (textWithoutMath[closing] === "(") depth += 1;
+      if (textWithoutMath[closing] === ")") depth -= 1;
+      closing += 1;
+    }
+
+    if (depth !== 0) {
+      normalized += textWithoutMath.slice(opening);
+      break;
+    }
+
+    const content = textWithoutMath.slice(opening + 1, closing - 1);
+    const looksLikeMath = /\\[a-zA-Z]+|[_^=]|\b(?:sin|cos|tan|log|ln)\b/.test(content);
+    normalized += looksLikeMath ? `$${content}$` : `(${content})`;
+    cursor = closing;
+  }
+
+  return normalized.replace(/@@MATH_(\d+)@@/g, (_match, index) => mathBlocks[Number(index)]);
+}
+
+function RichText({ children, className = "", inline = false }) {
+  if (!children) return null;
+
+  return (
+    <span className={`study-rich-text ${inline ? "study-rich-text-inline" : ""} ${className}`.trim()}>
+      <ReactMarkdown
+        remarkPlugins={markdownPlugins}
+        rehypePlugins={markdownRehypePlugins}
+        components={inline ? { p: ({ children: content }) => <>{content}</> } : undefined}
+      >
+        {normalizeStudyText(children)}
+      </ReactMarkdown>
+    </span>
+  );
+}
 
 export default function LearningPage() {
   return (
@@ -648,19 +720,9 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
   const [timerSec, setTimerSec] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerDisplay, setTimerDisplay] = useState("25:00");
-  const [timerRef, setTimerRef] = useState(null);
   const [notes, setNotes] = useState("");
-  const [tasks, setTasks] = useState([
-    { text: "Review the theory overview", done: false },
-    { text: "Solve worked examples", done: false },
-    { text: "Memorize key formulas", done: false },
-  ]);
+  const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
-  const [chatMessages, setChatMessages] = useState([
-    { role: "ai", text: `Hello! I am your study assistant for "${topic?.name}". Ask me anything about this topic.` }
-  ]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
 
   // Timer logic
   useEffect(() => {
@@ -697,44 +759,16 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
   }
 
   function addTask() {
-    if (!newTask.trim()) return;
-    setTasks((prev) => [...prev, { text: newTask.trim(), done: false }]);
+    const text = newTask.trim();
+    if (!text) return;
+    setTasks((previousTasks) => [...previousTasks, { text, done: false }]);
     setNewTask("");
   }
 
-  function toggleTask(idx) {
-    setTasks((prev) => prev.map((t, i) => i === idx ? { ...t, done: !t.done } : t));
-  }
-
-  async function sendChat() {
-    const msg = chatInput.trim();
-    if (!msg || chatLoading) return;
-    setChatInput("");
-    setChatMessages((prev) => [...prev, { role: "user", text: msg }]);
-    setChatLoading(true);
-    try {
-      const context = studyPack?.theory?.overview
-        ? `Topic: ${topic?.name}. Context: ${studyPack.theory.overview.slice(0, 500)}`
-        : `Topic: ${topic?.name}`;
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${context}\n\nStudent question: ${msg}` }] }]
-          })
-        }
-      );
-      const data = await res.json();
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I could not generate a response. Please try again.";
-      setChatMessages((prev) => [...prev, { role: "ai", text: reply }]);
-    } catch {
-      setChatMessages((prev) => [...prev, { role: "ai", text: "Connection error. Please check your network and try again." }]);
-    } finally {
-      setChatLoading(false);
-    }
+  function toggleTask(index) {
+    setTasks((previousTasks) => previousTasks.map((task, taskIndex) => (
+      taskIndex === index ? { ...task, done: !task.done } : task
+    )));
   }
 
   const tabs = [
@@ -756,7 +790,8 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
           </div>
           <div className="ss-header-right">
             <Link href={`/battle?topicId=${topic?.id}`} className="ss-battle-btn">
-              Fight Demon Boss
+              <span aria-hidden="true">⚔</span>
+              <span>Fight demon boss</span>
             </Link>
             <button className="ss-close-btn" onClick={onClose} aria-label="Close">
               ✕
@@ -839,11 +874,11 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
                 {/* Theory Tab */}
                 {activeTab === "theory" && studyPack.theory && (
                   <div className="ss-tab-content">
-                    <p className="ss-overview">{studyPack.theory.overview}</p>
+                    <RichText className="ss-overview">{studyPack.theory.overview}</RichText>
                     {studyPack.theory.concepts?.map((c, i) => (
                       <div className="ss-concept" key={i}>
-                        <h3 className="ss-concept-title">{c.title}</h3>
-                        <p className="ss-concept-body">{c.explanation}</p>
+                        <h3 className="ss-concept-title"><RichText inline>{c.title}</RichText></h3>
+                        <RichText className="ss-concept-body">{c.explanation}</RichText>
                       </div>
                     ))}
                     {studyPack.theory.keyPoints?.length > 0 && (
@@ -851,7 +886,7 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
                         <div className="ss-section-label">Key Takeaways</div>
                         <ul>
                           {studyPack.theory.keyPoints.map((pt, i) => (
-                            <li key={i}>{pt}</li>
+                            <li key={i}><RichText>{pt}</RichText></li>
                           ))}
                         </ul>
                       </div>
@@ -864,16 +899,16 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
                   <div className="ss-tab-content">
                     {(studyPack.examples || []).map((ex, i) => (
                       <div className="ss-example" key={i}>
-                        <div className="ss-example-title">{ex.title || `Example ${i + 1}`}</div>
+                        <div className="ss-example-title"><RichText inline>{ex.title || `Example ${i + 1}`}</RichText></div>
                         <div className="ss-example-row">
                           <span className="ss-ex-label">Question</span>
-                          <p>{ex.question}</p>
+                          <RichText>{ex.question}</RichText>
                         </div>
                         <div className="ss-example-row">
                           <span className="ss-ex-label ss-ex-label-solution">Solution</span>
-                          <p>{ex.solution}</p>
+                          <RichText>{ex.solution}</RichText>
                         </div>
-                        {ex.explanation && <p className="ss-ex-note">{ex.explanation}</p>}
+                        {ex.explanation && <RichText className="ss-ex-note">{ex.explanation}</RichText>}
                       </div>
                     ))}
                     {(!studyPack.examples || studyPack.examples.length === 0) && (
@@ -887,13 +922,13 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
                   <div className="ss-tab-content">
                     {(studyPack.formulas || []).map((f, i) => (
                       <div className="ss-formula" key={i}>
-                        <h3 className="ss-formula-name">{f.name}</h3>
-                        <code className="ss-formula-expr">{f.formula}</code>
-                        <p className="ss-formula-meaning">{f.meaning}</p>
+                        <h3 className="ss-formula-name"><RichText inline>{f.name}</RichText></h3>
+                        <RichText className="ss-formula-expr">{f.formula}</RichText>
+                        <RichText className="ss-formula-meaning">{f.meaning}</RichText>
                         {f.variables?.length > 0 && (
                           <ul className="ss-formula-vars">
                             {f.variables.map((v, vi) => (
-                              <li key={vi}><strong>{v.symbol}</strong> — {v.meaning}</li>
+                              <li key={vi}><strong><RichText inline>{v.symbol}</RichText></strong> — <RichText inline>{v.meaning}</RichText></li>
                             ))}
                           </ul>
                         )}
@@ -910,8 +945,8 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
                   <div className="ss-tab-content">
                     {(studyPack.aiResources || []).map((r, i) => (
                       <div className="ss-resource" key={i}>
-                        <h3 className="ss-resource-title">{r.title}</h3>
-                        <p>{r.description}</p>
+                        <h3 className="ss-resource-title"><RichText inline>{r.title}</RichText></h3>
+                        <RichText>{r.description}</RichText>
                       </div>
                     ))}
                     {(!studyPack.aiResources || studyPack.aiResources.length === 0) && (
@@ -926,56 +961,36 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
           {/* RIGHT SIDEBAR */}
           <div className="ss-sidebar">
 
-            {/* AI Chat */}
-            <div className="ss-chat-card">
-              <div className="ss-card-header">Study Assistant</div>
-              <div className="ss-chat-messages">
-                {chatMessages.map((m, i) => (
-                  <div key={i} className={`ss-msg ss-msg-${m.role}`}>
-                    <div className="ss-msg-bubble">{m.text}</div>
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div className="ss-msg ss-msg-ai">
-                    <div className="ss-msg-bubble ss-msg-thinking">Thinking...</div>
-                  </div>
-                )}
-              </div>
-              <div className="ss-chat-input-row">
-                <input
-                  className="ss-chat-input"
-                  placeholder="Ask anything about this topic..."
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
-                />
-                <button className="ss-btn ss-btn-primary ss-send-btn" onClick={sendChat} disabled={chatLoading}>
-                  {chatLoading ? "..." : "Send"}
-                </button>
-              </div>
-            </div>
-
-            {/* Tasks */}
+            {/* User-created Tasks */}
             <div className="ss-tasks-card">
-              <div className="ss-card-header">Study Tasks</div>
+              <div className="ss-card-header">Study tasks</div>
               <div className="ss-task-input-row">
                 <input
                   className="ss-task-input"
                   placeholder="Add a task..."
                   value={newTask}
-                  onChange={(e) => setNewTask(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addTask(); }}
+                  onChange={(event) => setNewTask(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") addTask(); }}
                 />
-                <button className="ss-btn ss-btn-primary" onClick={addTask}>Add</button>
+                <button className="ss-btn ss-btn-primary" onClick={addTask} type="button">
+                  Add
+                </button>
               </div>
-              <ul className="ss-task-list">
-                {tasks.map((t, i) => (
-                  <li key={i} className={`ss-task-item ${t.done ? "done" : ""}`}>
-                    <input type="checkbox" checked={t.done} onChange={() => toggleTask(i)} className="ss-checkbox" />
-                    <span className="ss-task-text">{t.text}</span>
-                  </li>
-                ))}
-              </ul>
+              {tasks.length > 0 && (
+                <ul className="ss-task-list">
+                  {tasks.map((task, index) => (
+                    <li key={`${task.text}-${index}`} className={`ss-task-item ${task.done ? "done" : ""}`}>
+                      <input
+                        type="checkbox"
+                        checked={task.done}
+                        onChange={() => toggleTask(index)}
+                        className="ss-checkbox"
+                      />
+                      <span className="ss-task-text">{task.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Notes */}
@@ -1739,6 +1754,245 @@ function StudySpace({ topic, studyPack, studyLoading, studyError, onClose, onRet
           .ss-card-header {
             padding: 10px 12px 8px;
           }
+        }
+
+        /* Reading-first palette: keep the study workspace separate from the battle arena. */
+        .ss-overlay {
+          background: rgba(58, 52, 43, 0.62);
+          backdrop-filter: blur(10px);
+          color: #2b2a25;
+          font-family: var(--font-geist-sans), system-ui, sans-serif;
+        }
+
+        .ss-shell {
+          background: #f4f0e8;
+          color: #2b2a25;
+        }
+
+        .ss-body {
+          grid-template-columns: minmax(0, 1fr) 280px;
+        }
+
+        .ss-battle-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 9px;
+          min-height: 44px;
+          padding: 11px 22px;
+          border-radius: 9px;
+          border: 1px solid rgba(145, 55, 43, 0.75);
+          background: #b94f3d;
+          color: #fffaf6;
+          box-shadow: 0 5px 14px rgba(185, 79, 61, 0.2);
+          font-size: 14px;
+          font-weight: 750;
+          line-height: 1;
+          text-decoration: none;
+          animation: ss-battle-glow 2.4s ease-in-out infinite;
+        }
+
+        .ss-battle-btn:hover {
+          background: #a44131;
+          box-shadow: 0 7px 18px rgba(185, 79, 61, 0.28);
+          animation-play-state: paused;
+        }
+
+        .ss-battle-btn:focus-visible {
+          outline: 3px solid rgba(217, 154, 99, 0.45);
+          outline-offset: 3px;
+        }
+
+        @keyframes ss-battle-glow {
+          0%, 100% {
+            box-shadow: 0 5px 14px rgba(185, 79, 61, 0.2), 0 0 0 rgba(217, 154, 99, 0);
+          }
+          50% {
+            box-shadow: 0 7px 20px rgba(185, 79, 61, 0.3), 0 0 18px rgba(217, 154, 99, 0.38);
+          }
+        }
+
+        .ss-header,
+        .ss-timer-card,
+        .ss-content-tabs,
+        .ss-main {
+          border-color: rgba(71, 64, 52, 0.14);
+        }
+
+        .ss-header,
+        .ss-timer-card {
+          background: #fbfaf6;
+        }
+
+        .ss-topic-tag,
+        .ss-section-label,
+        .ss-example-title {
+          color: #9a642f;
+        }
+
+        .ss-topic-title,
+        .ss-timer-display,
+        .ss-concept-title,
+        .ss-formula-name,
+        .ss-resource-title {
+          color: #2b2a25;
+        }
+
+        .ss-close-btn,
+        .ss-time-input,
+        .ss-chat-input,
+        .ss-task-input {
+          background: #fffdf8;
+          border-color: rgba(71, 64, 52, 0.2);
+          color: #2b2a25;
+        }
+
+        .ss-close-btn {
+          color: #6b6a63;
+        }
+
+        .ss-close-btn:hover,
+        .ss-btn-ghost:hover {
+          background: #ebe5d9;
+          color: #2b2a25;
+        }
+
+        .ss-timer-label,
+        .ss-time-unit,
+        .ss-time-sep,
+        .ss-card-header,
+        .ss-ex-label,
+        .ss-empty {
+          color: #77766f;
+        }
+
+        .ss-time-input:focus,
+        .ss-chat-input:focus,
+        .ss-task-input:focus {
+          outline: none;
+          border-color: rgba(154, 100, 47, 0.55);
+        }
+
+        .ss-btn-primary {
+          background: #d99a63;
+          color: #2b2118;
+        }
+
+        .ss-btn-primary:hover:not(:disabled) {
+          background: #c9824c;
+        }
+
+        .ss-btn-ghost {
+          background: #fffdf8;
+          color: #5b5a54;
+          border-color: rgba(71, 64, 52, 0.2);
+        }
+
+        .ss-content-tabs {
+          background: #f4f0e8;
+        }
+
+        .ss-tab {
+          color: #77766f;
+        }
+
+        .ss-tab:hover {
+          color: #2b2a25;
+          background: #ebe5d9;
+        }
+
+        .ss-tab.active {
+          color: #2b2a25;
+          border-bottom-color: #9a642f;
+          background: rgba(154, 100, 47, 0.1);
+        }
+
+        .ss-content-panel {
+          scrollbar-color: rgba(71, 64, 52, 0.25) transparent;
+        }
+
+        .ss-concept,
+        .ss-example,
+        .ss-formula,
+        .ss-resource {
+          background: #fffdf8;
+          border-color: rgba(71, 64, 52, 0.14);
+          box-shadow: 0 6px 18px rgba(71, 64, 52, 0.06);
+        }
+
+        .ss-overview,
+        .ss-example-row p,
+        .ss-concept-body,
+        .ss-resource p {
+          color: #555750;
+        }
+
+        .ss-keypoints li,
+        .ss-formula-vars li {
+          color: #686961;
+        }
+
+        .ss-ex-label-solution {
+          color: #4c7652;
+        }
+
+        .ss-formula-expr {
+          background: #ebe5d9;
+          border-color: rgba(154, 100, 47, 0.2);
+          color: #70451f;
+          font-family: var(--font-geist-mono), monospace;
+        }
+
+        .ss-formula-vars strong {
+          color: #3d3d37;
+        }
+
+        .ss-sidebar {
+          background: #ebe5d9;
+        }
+
+        .ss-notes-card {
+          flex: 1;
+          min-height: 0;
+        }
+
+        .ss-chat-card,
+        .ss-tasks-card,
+        .ss-chat-input-row,
+        .ss-card-header {
+          border-color: rgba(71, 64, 52, 0.14);
+        }
+
+        .ss-msg-user .ss-msg-bubble {
+          background: #e7d4c1;
+          border-color: rgba(154, 100, 47, 0.22);
+          color: #5d4028;
+        }
+
+        .ss-msg-ai .ss-msg-bubble,
+        .ss-task-item {
+          background: #f8f5ed;
+          border-color: rgba(71, 64, 52, 0.14);
+          color: #555750;
+        }
+
+        .ss-chat-input::placeholder,
+        .ss-task-input::placeholder,
+        .ss-notes-area::placeholder {
+          color: #9b9a91;
+        }
+
+        .ss-task-item.done .ss-task-text {
+          color: #99988f;
+        }
+
+        .ss-checkbox {
+          accent-color: #9a642f;
+        }
+
+        .ss-task-text,
+        .ss-notes-area {
+          color: #555750;
         }
       `}</style>
     </div>
