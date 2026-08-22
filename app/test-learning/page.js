@@ -393,10 +393,19 @@ export default function TestLearningPage() {
             <button
               onClick={() => {
                 window.location.href =
-                  `/test-learning/battle?topicId=${topicId}`;
+                  `/test-learning/battle/levels?topicId=${topicId}`;
+              }}
+              style={{
+                padding: "12px 20px",
+                border: "none",
+                borderRadius: "10px",
+                background: "#2563eb",
+                color: "#ffffff",
+                fontWeight: 700,
+                cursor: "pointer",
               }}
             >
-              ⚔️ Start Battle
+              ⚔️ Choose Battle Level
             </button>
           </section>
 

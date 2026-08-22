@@ -1,13 +1,50 @@
 import { NextResponse } from "next/server";
 import ai from "@/lib/gemini";
 import db from "@/lib/db.js";
+import {
+  buildBattlePrompt,
+  getBattleLevelConfig,
+  isValidBattleLevel,
+  validateQuestionDifficulty,
+} from "@/lib/battle-levels.js";
+
+function buildBattleResponse(topic, cachedBattle, cached) {
+  let questions;
+
+  try {
+    questions = JSON.parse(cachedBattle.questions);
+  } catch (error) {
+    console.error("Failed to parse cached battle JSON:", error);
+
+    return NextResponse.json(
+      {
+        error: "Cached battle data is corrupted.",
+      },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    cached,
+
+    topic: {
+      id: topic.id,
+      name: topic.name,
+    },
+
+    battle: {
+      id: Number(cachedBattle.id),
+      topicId: Number(cachedBattle.topic_id),
+      level: Number(cachedBattle.level),
+      questions,
+      createdAt: cachedBattle.created_at,
+    },
+  });
+}
 
 export async function POST(request, { params }) {
   try {
-    // --------------------------------------------------
-    // 1. Get and validate topic ID
-    // --------------------------------------------------
-
     const { topicId } = await params;
     const id = Number(topicId);
 
@@ -18,9 +55,17 @@ export async function POST(request, { params }) {
       );
     }
 
-    // --------------------------------------------------
-    // 2. Get topic information
-    // --------------------------------------------------
+    const { searchParams } = new URL(request.url);
+    const level = Number(searchParams.get("level"));
+
+    if (!isValidBattleLevel(level)) {
+      return NextResponse.json(
+        { error: "Invalid level. Level must be between 1 and 5." },
+        { status: 400 }
+      );
+    }
+
+    const levelConfig = getBattleLevelConfig(level);
 
     const topic = db
       .prepare(`
@@ -45,145 +90,32 @@ export async function POST(request, { params }) {
       );
     }
 
-    // --------------------------------------------------
-    // 3. CHECK BATTLE CACHE
-    // --------------------------------------------------
-    // If a battle has already been generated for this
-    // topic, return the exact same battle.
-    //
-    // Gemini will NOT be called again.
-    // --------------------------------------------------
-
     const cachedBattle = db
       .prepare(`
         SELECT
           id,
           topic_id,
+          level,
           questions,
           created_at
         FROM battles
-        WHERE topic_id = ?
+        WHERE topic_id = ? AND level = ?
       `)
-      .get(id);
+      .get(id, level);
 
     if (cachedBattle) {
       console.log(
-        `Battle loaded from database for topic ${id}.`
+        `Battle loaded from database for topic ${id}, level ${level}.`
       );
 
-      let questions;
-
-      try {
-        questions = JSON.parse(cachedBattle.questions);
-      } catch (error) {
-        console.error(
-          "Failed to parse cached battle JSON:",
-          error
-        );
-
-        return NextResponse.json(
-          {
-            error: "Cached battle data is corrupted.",
-          },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        cached: true,
-
-        topic: {
-          id: topic.id,
-          name: topic.name,
-        },
-
-        battle: {
-          id: Number(cachedBattle.id),
-          topicId: Number(cachedBattle.topic_id),
-          questions,
-          createdAt: cachedBattle.created_at,
-        },
-      });
+      return buildBattleResponse(topic, cachedBattle, true);
     }
-
-    // --------------------------------------------------
-    // 4. Generate new battle with Gemini
-    // --------------------------------------------------
 
     console.log(
-      `No cached battle found for topic ${id}. Generating...`
+      `No cached battle found for topic ${id}, level ${level}. Generating...`
     );
 
-    const prompt = `
-You are an expert examination question generator.
-
-Create exactly 10 questions for:
-
-Subject:
-${topic.subject_name}
-
-Chapter:
-${topic.chapter_name}
-
-Topic:
-${topic.name}
-
-These questions will be used in a student "Boss Battle".
-
-QUESTION DISTRIBUTION:
-
-- Questions 1-5: EASY
-- Questions 6-10: MEDIUM or HARD
-
-The first five questions should test fundamental understanding.
-
-The final five questions should test deeper understanding,
-application, reasoning, calculations, or problem solving.
-
-IMPORTANT RULES:
-
-1. Exactly 10 questions.
-2. Exactly 4 options per question.
-3. Only one option is correct.
-4. Questions must be unambiguous.
-5. Do not repeat essentially the same question.
-6. Questions must stay within the selected topic.
-7. Include the underlying concept being tested.
-8. Include a concise explanation.
-9. Difficulty must be exactly:
-   "easy", "medium", or "hard".
-10. Questions 1-5 MUST be "easy".
-11. Questions 6-10 MUST be "medium" or "hard".
-12. Return ONLY valid JSON.
-13. Do not use markdown code fences.
-
-Return exactly:
-
-{
-  "questions": [
-    {
-      "question": "...",
-      "options": [
-        "...",
-        "...",
-        "...",
-        "..."
-      ],
-      "correctAnswer": 0,
-      "explanation": "...",
-      "concept": "...",
-      "difficulty": "easy"
-    }
-  ]
-}
-
-correctAnswer is the zero-based index of the correct option.
-`;
-
-    // --------------------------------------------------
-    // 5. Call Gemini
-    // --------------------------------------------------
+    const prompt = buildBattlePrompt(topic, levelConfig);
 
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
@@ -205,14 +137,8 @@ correctAnswer is the zero-based index of the correct option.
     });
 
     if (!response.text) {
-      throw new Error(
-        "Gemini returned an empty response."
-      );
+      throw new Error("Gemini returned an empty response.");
     }
-
-    // --------------------------------------------------
-    // 6. Parse Gemini response
-    // --------------------------------------------------
 
     let generatedBattle;
 
@@ -230,10 +156,6 @@ correctAnswer is the zero-based index of the correct option.
       );
     }
 
-    // --------------------------------------------------
-    // 7. Validate questions
-    // --------------------------------------------------
-
     if (
       !generatedBattle ||
       !Array.isArray(generatedBattle.questions) ||
@@ -241,8 +163,7 @@ correctAnswer is the zero-based index of the correct option.
     ) {
       return NextResponse.json(
         {
-          error:
-            "Gemini did not return exactly 10 questions.",
+          error: "Gemini did not return exactly 10 questions.",
         },
         { status: 502 }
       );
@@ -251,7 +172,6 @@ correctAnswer is the zero-based index of the correct option.
     for (let i = 0; i < generatedBattle.questions.length; i++) {
       const question = generatedBattle.questions[i];
 
-      // Basic structure validation
       if (
         !question ||
         !question.question ||
@@ -264,15 +184,12 @@ correctAnswer is the zero-based index of the correct option.
       ) {
         return NextResponse.json(
           {
-            error: `Invalid question structure at question ${
-              i + 1
-            }.`,
+            error: `Invalid question structure at question ${i + 1}.`,
           },
           { status: 502 }
         );
       }
 
-      // Correct answer must be 0-3
       if (
         question.correctAnswer < 0 ||
         question.correctAnswer > 3 ||
@@ -280,50 +197,21 @@ correctAnswer is the zero-based index of the correct option.
       ) {
         return NextResponse.json(
           {
-            error: `Invalid correct answer at question ${
-              i + 1
-            }.`,
+            error: `Invalid correct answer at question ${i + 1}.`,
           },
           { status: 502 }
         );
       }
 
-      // First 5 must be easy
-      if (
-        i < 5 &&
-        question.difficulty !== "easy"
-      ) {
+      if (!validateQuestionDifficulty(level, i, question.difficulty)) {
         return NextResponse.json(
           {
-            error: `Question ${
-              i + 1
-            } must be easy.`,
-          },
-          { status: 502 }
-        );
-      }
-
-      // Last 5 must be medium/hard
-      if (
-        i >= 5 &&
-        !["medium", "hard"].includes(
-          question.difficulty
-        )
-      ) {
-        return NextResponse.json(
-          {
-            error: `Question ${
-              i + 1
-            } must be medium or hard.`,
+            error: `Question ${i + 1} has invalid difficulty for level ${level}.`,
           },
           { status: 502 }
         );
       }
     }
-
-    // --------------------------------------------------
-    // 8. Save questions to questions table
-    // --------------------------------------------------
 
     const insertQuestion = db.prepare(`
       INSERT INTO questions (
@@ -345,7 +233,7 @@ correctAnswer is the zero-based index of the correct option.
           topic.id,
           question.question,
           JSON.stringify(question.options),
-          String(question.correctAnswer),
+          question.correctAnswer,
           question.explanation,
           question.difficulty
         );
@@ -366,17 +254,6 @@ correctAnswer is the zero-based index of the correct option.
 
     const savedQuestions = saveQuestions();
 
-    // --------------------------------------------------
-    // 9. Save complete battle to battles table
-    // --------------------------------------------------
-    //
-    // battles.questions stores the complete generated
-    // battle as JSON.
-    //
-    // Because topic_id is UNIQUE, there can only be
-    // ONE cached battle for each topic.
-    // --------------------------------------------------
-
     let battleId;
 
     try {
@@ -384,70 +261,36 @@ correctAnswer is the zero-based index of the correct option.
         .prepare(`
           INSERT INTO battles (
             topic_id,
+            level,
             questions
           )
-          VALUES (?, ?)
+          VALUES (?, ?, ?)
         `)
-        .run(
-          id,
-          JSON.stringify(savedQuestions)
-        );
+        .run(id, level, JSON.stringify(savedQuestions));
 
-      battleId = Number(
-        battleResult.lastInsertRowid
-      );
+      battleId = Number(battleResult.lastInsertRowid);
     } catch (error) {
-      // ------------------------------------------------
-      // Possible race condition:
-      // Another request may have generated and cached
-      // the battle at almost the same time.
-      // ------------------------------------------------
+      console.error("Battle cache insert error:", error);
 
-      console.error(
-        "Battle cache insert error:",
-        error
-      );
-
-      // Try loading the battle that already exists.
       const existingBattle = db
         .prepare(`
           SELECT
             id,
             topic_id,
+            level,
             questions,
             created_at
           FROM battles
-          WHERE topic_id = ?
+          WHERE topic_id = ? AND level = ?
         `)
-        .get(id);
+        .get(id, level);
 
       if (existingBattle) {
-        return NextResponse.json({
-          success: true,
-          cached: true,
-
-          topic: {
-            id: topic.id,
-            name: topic.name,
-          },
-
-          battle: {
-            id: Number(existingBattle.id),
-            topicId: Number(existingBattle.topic_id),
-            questions: JSON.parse(
-              existingBattle.questions
-            ),
-            createdAt: existingBattle.created_at,
-          },
-        });
+        return buildBattleResponse(topic, existingBattle, true);
       }
 
       throw error;
     }
-
-    // --------------------------------------------------
-    // 10. Return newly generated battle
-    // --------------------------------------------------
 
     return NextResponse.json({
       success: true,
@@ -461,14 +304,12 @@ correctAnswer is the zero-based index of the correct option.
       battle: {
         id: battleId,
         topicId: topic.id,
+        level,
         questions: savedQuestions,
       },
     });
   } catch (error) {
-    console.error(
-      "Battle generation error:",
-      error
-    );
+    console.error("Battle generation error:", error);
 
     return NextResponse.json(
       {

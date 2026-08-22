@@ -1,12 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function BattlePage() {
+function renderStars(stars, max = 3) {
+  return Array.from({ length: max }, (_, index) => (
+    <span
+      key={index}
+      style={{
+        color: index < stars ? "#f59e0b" : "#d1d5db",
+        fontSize: "24px",
+      }}
+    >
+      ★
+    </span>
+  ));
+}
+
+function BattlePageContent() {
   const searchParams = useSearchParams();
 
   const topicId = searchParams.get("topicId");
+  const level = searchParams.get("level");
 
   const [battle, setBattle] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -21,16 +36,23 @@ export default function BattlePage() {
   const [error, setError] = useState("");
 
   const [lastAnswerCorrect, setLastAnswerCorrect] =
-  useState(null);
-  // -----------------------------
-  // Load battle
-  // -----------------------------
+    useState(null);
+
+  const [progressSaved, setProgressSaved] = useState(false);
+  const [savedProgress, setSavedProgress] = useState(null);
+  const [savingProgress, setSavingProgress] = useState(false);
 
   useEffect(() => {
     async function loadBattle() {
       try {
+        if (!level) {
+          window.location.href =
+            `/test-learning/battle/levels?topicId=${topicId}`;
+          return;
+        }
+
         const response = await fetch(
-          `/api/topics/${topicId}/battle`,
+          `/api/topics/${topicId}/battle?level=${level}`,
           {
             method: "POST",
           }
@@ -45,9 +67,9 @@ export default function BattlePage() {
         }
 
         setBattle(data.battle);
-      } catch (error) {
-        console.error(error);
-        setError(error.message);
+      } catch (loadError) {
+        console.error(loadError);
+        setError(loadError.message);
       } finally {
         setLoading(false);
       }
@@ -56,118 +78,157 @@ export default function BattlePage() {
     if (topicId) {
       loadBattle();
     }
-  }, [topicId]);
+  }, [topicId, level]);
 
-  // -----------------------------
-  // Submit answer
-  // -----------------------------
-
- async function submitAnswer() {
-  if (selectedAnswer === null) return;
-
-  try {
-    // -----------------------------
-    // Get logged-in user
-    // -----------------------------
-
-    const userData = localStorage.getItem("user");
-
-    if (!userData) {
-      setError("Please login before starting a battle.");
-      return;
-    }
-
-    const user = JSON.parse(userData);
-
-    if (!user?.id) {
-      setError("Invalid logged-in user.");
-      return;
-    }
-
-    // -----------------------------
-    // Current question
-    // -----------------------------
-
-    const question =
-      battle.questions[currentQuestion];
-
-    // -----------------------------
-    // Send answer to backend
-    // -----------------------------
-
-    const response = await fetch(
-      "/api/attempts",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          userId: user.id,
-          questionId: question.id,
-          answer: selectedAnswer,
-        }),
+  useEffect(() => {
+    async function saveProgress() {
+      if (
+        !battle ||
+        currentQuestion < battle.questions.length ||
+        progressSaved ||
+        savingProgress
+      ) {
+        return;
       }
-    );
 
-    const data = await response.json();
+      try {
+        setSavingProgress(true);
 
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-          "Failed to submit answer."
-      );
+        const userData = localStorage.getItem("user");
+
+        if (!userData) {
+          setError("Please login before saving battle progress.");
+          return;
+        }
+
+        const user = JSON.parse(userData);
+
+        if (!user?.id) {
+          setError("Invalid logged-in user.");
+          return;
+        }
+
+        const response = await fetch(
+          `/api/topics/${topicId}/battle/progress`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              level: Number(level),
+              score,
+            }),
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Failed to save battle progress."
+          );
+        }
+
+        setSavedProgress(data.progress);
+        setProgressSaved(true);
+      } catch (saveError) {
+        console.error("Progress save error:", saveError);
+        setError(saveError.message);
+      } finally {
+        setSavingProgress(false);
+      }
     }
 
-    // -----------------------------
-    // Backend decides correctness
-    // -----------------------------
+    saveProgress();
+  }, [
+    battle,
+    currentQuestion,
+    level,
+    progressSaved,
+    savingProgress,
+    score,
+    topicId,
+  ]);
 
-    const correct =
-      data.attempt.isCorrect;
+  async function submitAnswer() {
+    if (selectedAnswer === null) return;
 
-    setLastAnswerCorrect(correct);
+    try {
+      const userData = localStorage.getItem("user");
 
-    setSubmitted(true);
+      if (!userData) {
+        setError("Please login before starting a battle.");
+        return;
+      }
 
-    // -----------------------------
-    // Correct answer
-    // -----------------------------
+      const user = JSON.parse(userData);
 
-    if (correct) {
-      setScore((prev) => prev + 1);
+      if (!user?.id) {
+        setError("Invalid logged-in user.");
+        return;
+      }
 
-      setBossHp((prev) =>
-        Math.max(prev - 10, 0)
+      const question =
+        battle.questions[currentQuestion];
+
+      const response = await fetch(
+        "/api/attempts",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            userId: user.id,
+            questionId: question.id,
+            answer: selectedAnswer,
+          }),
+        }
       );
-    }
-  } catch (error) {
-    console.error(
-      "Answer submission error:",
-      error
-    );
 
-    setError(error.message);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Failed to submit answer."
+        );
+      }
+
+      const correct =
+        data.attempt.isCorrect;
+
+      setLastAnswerCorrect(correct);
+      setSubmitted(true);
+
+      if (correct) {
+        setScore((prev) => prev + 1);
+
+        setBossHp((prev) =>
+          Math.max(prev - 10, 0)
+        );
+      }
+    } catch (submitError) {
+      console.error(
+        "Answer submission error:",
+        submitError
+      );
+
+      setError(submitError.message);
+    }
   }
-}
-
-  // -----------------------------
-  // Next question
-  // -----------------------------
 
   function nextQuestion() {
-  setSelectedAnswer(null);
-  setSubmitted(false);
-  setLastAnswerCorrect(null);
+    setSelectedAnswer(null);
+    setSubmitted(false);
+    setLastAnswerCorrect(null);
 
-  setCurrentQuestion((prev) => prev + 1);
-}
-
-  // -----------------------------
-  // Loading
-  // -----------------------------
+    setCurrentQuestion((prev) => prev + 1);
+  }
 
   if (loading) {
     return (
@@ -190,24 +251,31 @@ export default function BattlePage() {
     return null;
   }
 
-  // -----------------------------
-  // Battle complete
-  // -----------------------------
-
   if (
     currentQuestion >=
     battle.questions.length
   ) {
+    const stars = savedProgress?.stars ?? 0;
+    const completed = savedProgress?.completed ?? false;
+
     return (
       <main style={styles.container}>
         <h1>⚔️ Battle Complete</h1>
 
         <div style={styles.card}>
+          <p style={styles.levelLabel}>
+            Level {battle.level}
+          </p>
+
           <h2>Final Score</h2>
 
-          <p>
+          <p style={styles.finalScore}>
             {score} / {battle.questions.length}
           </p>
+
+          <div style={styles.starRow}>
+            {renderStars(stars)}
+          </div>
 
           <h2>Boss HP</h2>
 
@@ -218,6 +286,33 @@ export default function BattlePage() {
           ) : (
             <h2>Boss Survived</h2>
           )}
+
+          {savingProgress && (
+            <p>Saving progress...</p>
+          )}
+
+          {!savingProgress && completed && (
+            <p style={styles.successText}>
+              Level completed! The next level is now unlocked.
+            </p>
+          )}
+
+          {!savingProgress && !completed && (
+            <p style={styles.retryText}>
+              Score at least 5/10 to complete this level and unlock the next one.
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href =
+                `/test-learning/battle/levels?topicId=${topicId}`;
+            }}
+            style={styles.next}
+          >
+            Back to Levels
+          </button>
         </div>
       </main>
     );
@@ -227,25 +322,16 @@ export default function BattlePage() {
     battle.questions[currentQuestion];
 
   const isCorrect =
-  submitted && lastAnswerCorrect === true;
-
-const isIncorrect =
-  submitted && lastAnswerCorrect === false;
-
-  // -----------------------------
-  // Battle screen
-  // -----------------------------
+    submitted && lastAnswerCorrect === true;
 
   return (
     <main style={styles.container}>
       <h1>⚔️ BATTLE MODE</h1>
 
       <p>
-        Question {currentQuestion + 1} /{" "}
+        Level {battle.level} · Question {currentQuestion + 1} /{" "}
         {battle.questions.length}
       </p>
-
-      {/* Boss */}
 
       <div style={styles.boss}>
         <div style={{ fontSize: "60px" }}>
@@ -267,8 +353,6 @@ const isIncorrect =
           Boss HP: <strong>{bossHp}</strong> / 100
         </p>
       </div>
-
-      {/* Question */}
 
       <div style={styles.card}>
         <h2>{question.question}</h2>
@@ -318,48 +402,48 @@ const isIncorrect =
           </button>
         )}
 
-       {submitted && (
-  <div style={styles.explanation}>
-    <h3>
-      {isCorrect
-        ? "✅ Correct!"
-        : "❌ Incorrect"}
-    </h3>
+        {submitted && (
+          <div style={styles.explanation}>
+            <h3>
+              {isCorrect
+                ? "✅ Correct!"
+                : "❌ Incorrect"}
+            </h3>
 
-    {!isCorrect && (
-      <p>
-        <strong>
-          Correct answer:
-        </strong>{" "}
-        {question.options[question.correctAnswer]}
-      </p>
-    )}
+            {!isCorrect && (
+              <p>
+                <strong>
+                  Correct answer:
+                </strong>{" "}
+                {question.options[question.correctAnswer]}
+              </p>
+            )}
 
-    <p>
-      {question.explanation}
-    </p>
+            <p>
+              {question.explanation}
+            </p>
 
-    {currentQuestion <
-      battle.questions.length - 1 && (
-      <button
-        onClick={nextQuestion}
-        style={styles.next}
-      >
-        Next Question →
-      </button>
-    )}
+            {currentQuestion <
+              battle.questions.length - 1 && (
+              <button
+                onClick={nextQuestion}
+                style={styles.next}
+              >
+                Next Question →
+              </button>
+            )}
 
-    {currentQuestion ===
-      battle.questions.length - 1 && (
-      <button
-        onClick={nextQuestion}
-        style={styles.next}
-      >
-        Finish Battle
-      </button>
-    )}
-  </div>
-)}
+            {currentQuestion ===
+              battle.questions.length - 1 && (
+              <button
+                onClick={nextQuestion}
+                style={styles.next}
+              >
+                Finish Battle
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </main>
   );
@@ -401,6 +485,37 @@ const styles = {
     borderRadius: "10px",
   },
 
+  levelLabel: {
+    margin: 0,
+    color: "#2563eb",
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "13px",
+  },
+
+  finalScore: {
+    fontSize: "28px",
+    fontWeight: 700,
+    margin: "8px 0 12px",
+  },
+
+  starRow: {
+    display: "flex",
+    gap: "4px",
+    marginBottom: "20px",
+  },
+
+  successText: {
+    color: "#16a34a",
+    fontWeight: 600,
+  },
+
+  retryText: {
+    color: "#b45309",
+    fontWeight: 600,
+  },
+
   option: {
     display: "block",
     width: "100%",
@@ -440,3 +555,17 @@ const styles = {
     cursor: "pointer",
   },
 };
+
+export default function BattlePage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={styles.container}>
+          <h1>⚔️ Preparing Battle...</h1>
+        </main>
+      }
+    >
+      <BattlePageContent />
+    </Suspense>
+  );
+}
