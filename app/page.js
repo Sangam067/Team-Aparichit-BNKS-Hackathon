@@ -2,15 +2,15 @@ import Link from "next/link";
 
 const navigation = [
   { label: "Home", href: "#home", active: true },
-  { label: "Upload", href: "/test-learning" },
-  { label: "Roadmap", href: "#roadmap" },
+  { label: "Upload Syllabus", href: "/syllabus" },
+  { label: "Learning Path", href: "/learning" },
 ];
 
 const featureLinks = [
-  { label: "Learn", href: "/test-learning" },
-  { label: "Build", href: "#projects" },
-  { label: "Track", href: "#progress" },
-  { label: "Connect", href: "#community" },
+  { label: "Learn", href: "/learning" },
+  { label: "Upload Syllabus", href: "/syllabus" },
+  { label: "Boss Battle", href: "/learning" },
+  { label: "Community", href: "#community" },
 ];
 
 function Brand() {
@@ -53,8 +53,8 @@ export default function Home() {
           <h1 id="hero-title">Level up your <span>future.</span></h1>
           <p className="hero-description">GameEdu makes learning interactive with game-inspired courses, hands-on projects, and a community that builds the future together.</p>
           <div className="hero-actions">
-            <a className="button button-primary button-large" href="/test-learning"><span className="pixel-cursor" aria-hidden="true">+</span> Start learning</a>
-            <a className="button button-video" href="#about"><span className="play-icon" aria-hidden="true">▶</span> Watch video</a>
+            <Link className="button button-primary button-large" href="/syllabus"><span className="pixel-cursor" aria-hidden="true">+</span> Upload &amp; Start Learning</Link>
+            <Link className="button button-video" href="/learning"><span className="play-icon" aria-hidden="true">▶</span> View Learning Path</Link>
           </div>
           <div className="social-proof">
             <div className="avatar-stack" aria-hidden="true"><span>AR</span><span>JL</span><span>MK</span><span>+</span></div>
