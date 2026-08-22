@@ -443,20 +443,25 @@ Return ONLY valid JSON.
     // 8. SAVE TO SQLITE
     // -----------------------------
 
-    db.prepare(`
-      INSERT INTO theories (
-        topic_id,
-        content
-      )
-      VALUES (?, ?)
-    `).run(
-      id,
-      JSON.stringify(studyPack)
-    );
+    try {
+      db.prepare(`
+        INSERT INTO theories (
+          topic_id,
+          content
+        )
+        VALUES (?, ?)
+        ON CONFLICT(topic_id) DO UPDATE SET content = excluded.content
+      `).run(
+        id,
+        JSON.stringify(studyPack)
+      );
 
-    console.log(
-      `Study pack saved to database for topic ${id}`
-    );
+      console.log(
+        `Study pack saved to database for topic ${id}`
+      );
+    } catch (dbErr) {
+      console.warn("Theory cache save warning:", dbErr.message);
+    }
 
 
     return NextResponse.json({
