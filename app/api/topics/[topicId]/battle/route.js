@@ -23,6 +23,7 @@ export async function POST(request, { params }) {
         SELECT
           t.id,
           t.name,
+          s.id AS subject_id,
           c.name AS chapter_name,
           s.name AS subject_name
         FROM topics t
@@ -94,6 +95,7 @@ export async function POST(request, { params }) {
         topic: {
           id: topic.id,
           name: topic.name,
+          subjectId: Number(topic.subject_id),
         },
 
         battle: {
@@ -393,6 +395,7 @@ correctAnswer is the zero-based index of the correct option.
           topic: {
             id: topic.id,
             name: topic.name,
+            subjectId: Number(topic.subject_id),
           },
 
           battle: {
@@ -420,6 +423,7 @@ correctAnswer is the zero-based index of the correct option.
       topic: {
         id: topic.id,
         name: topic.name,
+        subjectId: Number(topic.subject_id),
       },
 
       battle: {

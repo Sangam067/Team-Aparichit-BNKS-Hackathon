@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
@@ -96,6 +96,7 @@ function LearningContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedSubjectId = searchParams.get("subjectId");
+  const requestedOpenTopicId = searchParams.get("openTopicId");
 
   const [subjects, setSubjects] = useState([]);
   const [currentSubjectId, setCurrentSubjectId] = useState("");
@@ -109,6 +110,7 @@ function LearningContent() {
   const [studyPack, setStudyPack] = useState(null);
   const [studyLoading, setStudyLoading] = useState(false);
   const [studyError, setStudyError] = useState("");
+  const [autoOpenResolved, setAutoOpenResolved] = useState(false);
 
   // Mastered topics stored locally (only set when demon is defeated)
   const [masteredTopics, setMasteredTopics] = useState(new Set());
@@ -180,7 +182,7 @@ function LearningContent() {
   }, [currentSubjectId]);
 
   // 3. Open Study Pack Theory for a Topic
-  async function openTopicStudy(topic) {
+  const openTopicStudy = useCallback(async (topic) => {
     setSelectedTopic(topic);
     setStudyPack(null);
     setStudyError("");
@@ -204,7 +206,76 @@ function LearningContent() {
     } finally {
       setStudyLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    setAutoOpenResolved(false);
+  }, [requestedOpenTopicId]);
+
+  useEffect(() => {
+    if (autoOpenResolved || !requestedOpenTopicId || !curriculum || loading) return;
+
+    const topicIdNum = Number(requestedOpenTopicId);
+    if (!Number.isInteger(topicIdNum) || topicIdNum <= 0) {
+      setAutoOpenResolved(true);
+      return;
+    }
+
+    const topicsInCurrentSubject =
+      curriculum?.chapters?.flatMap((chapter) => chapter.topics || []) || [];
+    const matchedTopic = topicsInCurrentSubject.find((topic) => Number(topic.id) === topicIdNum);
+
+    if (matchedTopic) {
+      setAutoOpenResolved(true);
+      openTopicStudy(matchedTopic);
+
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("openTopicId");
+      const nextQuery = nextParams.toString();
+      router.replace(nextQuery ? `/learning?${nextQuery}` : "/learning");
+      return;
+    }
+
+    let isDisposed = false;
+
+    async function resolveSubjectForTopic() {
+      try {
+        const res = await fetch(`/api/topics/${topicIdNum}`);
+        const data = await res.json();
+
+        if (!res.ok || !data?.success || !data?.topic?.subject?.id) {
+          if (!isDisposed) setAutoOpenResolved(true);
+          return;
+        }
+
+        const subjectId = String(data.topic.subject.id);
+        if (subjectId !== currentSubjectId) {
+          if (!isDisposed) setCurrentSubjectId(subjectId);
+          return;
+        }
+
+        if (!isDisposed) setAutoOpenResolved(true);
+      } catch (error) {
+        console.error("Failed to resolve topic subject:", error);
+        if (!isDisposed) setAutoOpenResolved(true);
+      }
+    }
+
+    resolveSubjectForTopic();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [
+    autoOpenResolved,
+    requestedOpenTopicId,
+    curriculum,
+    loading,
+    openTopicStudy,
+    searchParams,
+    router,
+    currentSubjectId,
+  ]);
 
   // Flatten all topics across chapters
   const allTopics =
