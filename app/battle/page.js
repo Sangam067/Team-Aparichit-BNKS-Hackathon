@@ -47,6 +47,25 @@ function BattleContent() {
   const [damagePopup, setDamagePopup] = useState(null);
   const [playerDamagePopup, setPlayerDamagePopup] = useState(null);
 
+  const resetBattleState = useCallback(() => {
+    setBattle(null);
+    setTopic(null);
+    setCurrentQuestion(0);
+    setSelectedAnswer(null);
+    setSubmitted(false);
+    setLastAnswerCorrect(null);
+    setScore(0);
+    setBossHp(80);
+    setPlayerHp(50);
+    setWrongCount(0);
+    setSubmitting(false);
+    setShakeMonster(false);
+    setShakePlayer(false);
+    setDamagePopup(null);
+    setPlayerDamagePopup(null);
+    setError("");
+  }, []);
+
   // Determine damage dealt to boss based on question difficulty
   function getDamageForQuestion(q) {
     const diff = (q.difficulty || "easy").toLowerCase();
@@ -64,6 +83,8 @@ function BattleContent() {
 
   // 1. Load Battle Questions
   useEffect(() => {
+    let isCancelled = false;
+
     async function loadBattle() {
       if (!topicId) {
         setError("No topic selected for battle.");
@@ -72,6 +93,7 @@ function BattleContent() {
       }
 
       try {
+        resetBattleState();
         setLoading(true);
         const response = await fetch(`/api/topics/${topicId}/battle`, {
           method: "POST",
@@ -83,18 +105,25 @@ function BattleContent() {
           throw new Error(data.error || "Failed to load battle questions.");
         }
 
+        if (isCancelled) return;
         setBattle(data.battle);
         setTopic(data.topic);
       } catch (err) {
+        if (isCancelled) return;
         console.error("Battle load error:", err);
         setError(err.message || "Failed to initialize battle.");
       } finally {
+        if (isCancelled) return;
         setLoading(false);
       }
     }
 
     loadBattle();
-  }, [topicId]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [topicId, resetBattleState]);
 
   // 2. Submit Answer
   const submitAnswer = useCallback(async () => {
@@ -192,6 +221,21 @@ function BattleContent() {
         // ignore
       }
     }
+
+    if (topicId) {
+      const params = new URLSearchParams();
+      if (topic?.subjectId) {
+        params.set("subjectId", String(topic.subjectId));
+      }
+
+      if (bossHp > 0) {
+        params.set("openTopicId", String(topicId));
+      }
+
+      router.push(`/learning?${params.toString()}`);
+      return;
+    }
+
     router.push("/learning");
   }
 
@@ -281,7 +325,7 @@ function BattleContent() {
 
             <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
               <button className="boss-btn boss-btn-primary" onClick={handleFinishBattle}>
-                🚀 Continue Learning →
+                {isBattleWon ? "🗺️ Back to Roadmap" : "📘 Go to Study"}
               </button>
               <button className="boss-btn boss-btn-ghost" onClick={() => window.location.reload()}>
                 🔄 Replay
